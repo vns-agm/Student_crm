@@ -1,0 +1,73 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap');
+
+:root {
+  --bg: #e8eef5;
+  --surface: #f5f8fc;
+  --surface-strong: #ffffff;
+  --ink: #152033;
+  --muted: #5b6b82;
+  --line: #d0dae8;
+  --brand: #1d4f91;
+  --brand-soft: #dce8f8;
+  --accent: #0f766e;
+  --ok: #0f766e;
+  --warn: #a16207;
+  --danger: #b42318;
+  --present: #0f766e;
+  --late: #a16207;
+  --absent: #b42318;
+  --shadow: 0 16px 36px rgba(21, 32, 51, 0.08);
+  --radius: 16px;
+  font-family: 'Source Sans 3', sans-serif;
+  line-height: 1.5;
+  font-weight: 500;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 0% 0%, rgba(29, 79, 145, 0.14), transparent 34%),
+    radial-gradient(circle at 100% 0%, rgba(15, 118, 110, 0.1), transparent 30%),
+    linear-gradient(165deg, #f0f4f9 0%, var(--bg) 48%, #dde6f1 100%);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  min-width: 320px;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+h1,
+h2,
+.brand-name,
+.stat-value {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(1.75rem, 2vw, 2.2rem);
+}
+
+h2 {
+  margin: 0 0 1rem;
+  font-size: 1.1rem;
+}
