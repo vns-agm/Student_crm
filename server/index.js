@@ -1,6 +1,6 @@
 import cors from 'cors'
 import express from 'express'
-import db from './db.js'
+import { db, ensureDb } from './db.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -9,24 +9,31 @@ const BATCHES = new Set(['beginner', 'intermediate', 'advanced'])
 app.use(cors())
 app.use(express.json())
 
-function mapStudent(row) {
-  const attendance = db
-    .prepare(
-      `SELECT id, date, status
-       FROM attendance
-       WHERE student_id = ?
-       ORDER BY date DESC`,
-    )
-    .all(row.id)
+app.use(async (_req, _res, next) => {
+  try {
+    await ensureDb()
+    next()
+  } catch (error) {
+    next(error)
+  }
+})
 
-  const payments = db
-    .prepare(
-      `SELECT id, amount, date, note
-       FROM payments
-       WHERE student_id = ?
-       ORDER BY date DESC, rowid DESC`,
-    )
-    .all(row.id)
+async function mapStudent(row) {
+  const attendance = await db.execute({
+    sql: `SELECT id, date, status
+          FROM attendance
+          WHERE student_id = ?
+          ORDER BY date DESC`,
+    args: [row.id],
+  })
+
+  const payments = await db.execute({
+    sql: `SELECT id, amount, date, note
+          FROM payments
+          WHERE student_id = ?
+          ORDER BY date DESC, rowid DESC`,
+    args: [row.id],
+  })
 
   return {
     id: row.id,
@@ -37,10 +44,10 @@ function mapStudent(row) {
     feesPerClass: row.fees_per_class,
     batch: row.batch,
     totalFees: row.total_fees,
-    amountPaid: row.amount_paid,
+    amountPaid: row.amount_paid ?? 0,
     createdAt: row.created_at,
-    attendance,
-    payments,
+    attendance: attendance.rows,
+    payments: payments.rows,
   }
 }
 
@@ -92,229 +99,291 @@ function parseStudentBody(body) {
   }
 }
 
+async function getStudentRow(id) {
+  const result = await db.execute({
+    sql: 'SELECT * FROM students WHERE id = ?',
+    args: [id],
+  })
+  return result.rows[0] ?? null
+}
+
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true })
+  res.json({
+    ok: true,
+    database: process.env.TURSO_DATABASE_URL ? 'turso' : 'local-file',
+  })
 })
 
-app.get('/api/students', (_req, res) => {
-  const rows = db
-    .prepare('SELECT * FROM students ORDER BY created_at DESC')
-    .all()
-  res.json(rows.map(mapStudent))
-})
-
-app.post('/api/students', (req, res) => {
-  const parsed = parseStudentBody(req.body)
-  if (parsed.error) {
-    return res.status(400).json({ error: parsed.error })
-  }
-
-  const student = {
-    id: crypto.randomUUID(),
-    name: parsed.name,
-    age: parsed.age,
-    payment_date: parsed.paymentDate,
-    number_of_classes: parsed.numberOfClasses,
-    fees_per_class: parsed.feesPerClass,
-    batch: parsed.batch,
-    total_fees: parsed.totalFees,
-    amount_paid: parsed.amountPaid,
-    created_at: new Date().toISOString(),
-  }
-
-  db.prepare(
-    `INSERT INTO students (
-      id, name, age, payment_date, number_of_classes,
-      fees_per_class, batch, total_fees, amount_paid, created_at
-    ) VALUES (
-      @id, @name, @age, @payment_date, @number_of_classes,
-      @fees_per_class, @batch, @total_fees, @amount_paid, @created_at
-    )`,
-  ).run(student)
-
-  res.status(201).json(mapStudent(student))
-})
-
-app.put('/api/students/:id', (req, res) => {
-  const existing = db
-    .prepare('SELECT * FROM students WHERE id = ?')
-    .get(req.params.id)
-
-  if (!existing) {
-    return res.status(404).json({ error: 'Student not found.' })
-  }
-
-  const parsed = parseStudentBody(req.body)
-  if (parsed.error) {
-    return res.status(400).json({ error: parsed.error })
-  }
-
-  db.prepare(
-    `UPDATE students
-     SET name = ?, age = ?, payment_date = ?, number_of_classes = ?,
-         fees_per_class = ?, batch = ?, total_fees = ?, amount_paid = ?
-     WHERE id = ?`,
-  ).run(
-    parsed.name,
-    parsed.age,
-    parsed.paymentDate,
-    parsed.numberOfClasses,
-    parsed.feesPerClass,
-    parsed.batch,
-    parsed.totalFees,
-    parsed.amountPaid,
-    req.params.id,
-  )
-
-  const updated = db
-    .prepare('SELECT * FROM students WHERE id = ?')
-    .get(req.params.id)
-
-  res.json(mapStudent(updated))
-})
-
-app.delete('/api/students/:id', (req, res) => {
-  const result = db.prepare('DELETE FROM students WHERE id = ?').run(req.params.id)
-  if (result.changes === 0) {
-    return res.status(404).json({ error: 'Student not found.' })
-  }
-  res.status(204).end()
-})
-
-app.put('/api/students/:id/attendance', (req, res) => {
-  const student = db
-    .prepare('SELECT id FROM students WHERE id = ?')
-    .get(req.params.id)
-
-  if (!student) {
-    return res.status(404).json({ error: 'Student not found.' })
-  }
-
-  const date = String(req.body?.date ?? '')
-  const status = String(req.body?.status ?? '')
-
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    return res.status(400).json({ error: 'Valid date is required (YYYY-MM-DD).' })
-  }
-  if (!['present', 'absent', 'late'].includes(status)) {
-    return res.status(400).json({ error: 'Status must be present, absent, or late.' })
-  }
-
-  const existing = db
-    .prepare(
-      'SELECT id FROM attendance WHERE student_id = ? AND date = ?',
+app.get('/api/students', async (_req, res, next) => {
+  try {
+    const result = await db.execute(
+      'SELECT * FROM students ORDER BY created_at DESC',
     )
-    .get(req.params.id, date)
-
-  if (existing) {
-    db.prepare('UPDATE attendance SET status = ? WHERE id = ?').run(
-      status,
-      existing.id,
-    )
-  } else {
-    db.prepare(
-      `INSERT INTO attendance (id, student_id, date, status)
-       VALUES (?, ?, ?, ?)`,
-    ).run(crypto.randomUUID(), req.params.id, date, status)
+    const students = await Promise.all(result.rows.map((row) => mapStudent(row)))
+    res.json(students)
+  } catch (error) {
+    next(error)
   }
-
-  const row = db
-    .prepare('SELECT * FROM students WHERE id = ?')
-    .get(req.params.id)
-
-  res.json(mapStudent(row))
 })
 
-app.put('/api/attendance/bulk', (req, res) => {
-  const date = String(req.body?.date ?? '')
-  const status = String(req.body?.status ?? '')
+app.post('/api/students', async (req, res, next) => {
+  try {
+    const parsed = parseStudentBody(req.body)
+    if (parsed.error) {
+      return res.status(400).json({ error: parsed.error })
+    }
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    return res.status(400).json({ error: 'Valid date is required (YYYY-MM-DD).' })
+    const id = crypto.randomUUID()
+    const createdAt = new Date().toISOString()
+
+    await db.execute({
+      sql: `INSERT INTO students (
+              id, name, age, payment_date, number_of_classes,
+              fees_per_class, batch, total_fees, amount_paid, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        id,
+        parsed.name,
+        parsed.age,
+        parsed.paymentDate,
+        parsed.numberOfClasses,
+        parsed.feesPerClass,
+        parsed.batch,
+        parsed.totalFees,
+        parsed.amountPaid,
+        createdAt,
+      ],
+    })
+
+    const row = await getStudentRow(id)
+    res.status(201).json(await mapStudent(row))
+  } catch (error) {
+    next(error)
   }
-  if (!['present', 'absent', 'late'].includes(status)) {
-    return res.status(400).json({ error: 'Status must be present, absent, or late.' })
+})
+
+app.put('/api/students/:id', async (req, res, next) => {
+  try {
+    const existing = await getStudentRow(req.params.id)
+    if (!existing) {
+      return res.status(404).json({ error: 'Student not found.' })
+    }
+
+    const parsed = parseStudentBody(req.body)
+    if (parsed.error) {
+      return res.status(400).json({ error: parsed.error })
+    }
+
+    await db.execute({
+      sql: `UPDATE students
+             SET name = ?, age = ?, payment_date = ?, number_of_classes = ?,
+                 fees_per_class = ?, batch = ?, total_fees = ?, amount_paid = ?
+             WHERE id = ?`,
+      args: [
+        parsed.name,
+        parsed.age,
+        parsed.paymentDate,
+        parsed.numberOfClasses,
+        parsed.feesPerClass,
+        parsed.batch,
+        parsed.totalFees,
+        parsed.amountPaid,
+        req.params.id,
+      ],
+    })
+
+    const row = await getStudentRow(req.params.id)
+    res.json(await mapStudent(row))
+  } catch (error) {
+    next(error)
   }
+})
 
-  const students = db.prepare('SELECT id FROM students').all()
-  const find = db.prepare(
-    'SELECT id FROM attendance WHERE student_id = ? AND date = ?',
-  )
-  const update = db.prepare('UPDATE attendance SET status = ? WHERE id = ?')
-  const insert = db.prepare(
-    `INSERT INTO attendance (id, student_id, date, status)
-     VALUES (?, ?, ?, ?)`,
-  )
+app.delete('/api/students/:id', async (req, res, next) => {
+  try {
+    const result = await db.execute({
+      sql: 'DELETE FROM students WHERE id = ?',
+      args: [req.params.id],
+    })
 
-  const tx = db.transaction(() => {
-    for (const student of students) {
-      const existing = find.get(student.id, date)
-      if (existing) {
-        update.run(status, existing.id)
+    if ((result.rowsAffected ?? 0) === 0) {
+      return res.status(404).json({ error: 'Student not found.' })
+    }
+
+    res.status(204).end()
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.put('/api/students/:id/attendance', async (req, res, next) => {
+  try {
+    const student = await getStudentRow(req.params.id)
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found.' })
+    }
+
+    const date = String(req.body?.date ?? '')
+    const status = String(req.body?.status ?? '')
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: 'Valid date is required (YYYY-MM-DD).' })
+    }
+    if (!['present', 'absent', 'late'].includes(status)) {
+      return res
+        .status(400)
+        .json({ error: 'Status must be present, absent, or late.' })
+    }
+
+    const existing = await db.execute({
+      sql: 'SELECT id FROM attendance WHERE student_id = ? AND date = ?',
+      args: [req.params.id, date],
+    })
+
+    if (existing.rows[0]) {
+      await db.execute({
+        sql: 'UPDATE attendance SET status = ? WHERE id = ?',
+        args: [status, existing.rows[0].id],
+      })
+    } else {
+      await db.execute({
+        sql: `INSERT INTO attendance (id, student_id, date, status)
+              VALUES (?, ?, ?, ?)`,
+        args: [crypto.randomUUID(), req.params.id, date, status],
+      })
+    }
+
+    const row = await getStudentRow(req.params.id)
+    res.json(await mapStudent(row))
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.put('/api/attendance/bulk', async (req, res, next) => {
+  try {
+    const date = String(req.body?.date ?? '')
+    const status = String(req.body?.status ?? '')
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: 'Valid date is required (YYYY-MM-DD).' })
+    }
+    if (!['present', 'absent', 'late'].includes(status)) {
+      return res
+        .status(400)
+        .json({ error: 'Status must be present, absent, or late.' })
+    }
+
+    const students = await db.execute('SELECT id FROM students')
+    const statements = []
+
+    for (const student of students.rows) {
+      const existing = await db.execute({
+        sql: 'SELECT id FROM attendance WHERE student_id = ? AND date = ?',
+        args: [student.id, date],
+      })
+
+      if (existing.rows[0]) {
+        statements.push({
+          sql: 'UPDATE attendance SET status = ? WHERE id = ?',
+          args: [status, existing.rows[0].id],
+        })
       } else {
-        insert.run(crypto.randomUUID(), student.id, date, status)
+        statements.push({
+          sql: `INSERT INTO attendance (id, student_id, date, status)
+                VALUES (?, ?, ?, ?)`,
+          args: [crypto.randomUUID(), student.id, date, status],
+        })
       }
     }
+
+    if (statements.length > 0) {
+      await db.batch(statements, 'write')
+    }
+
+    const result = await db.execute(
+      'SELECT * FROM students ORDER BY created_at DESC',
+    )
+    const mapped = await Promise.all(result.rows.map((row) => mapStudent(row)))
+    res.json(mapped)
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/students/:id/payments', async (req, res, next) => {
+  try {
+    const student = await getStudentRow(req.params.id)
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found.' })
+    }
+
+    const amount = Number(req.body?.amount)
+    const date = String(req.body?.date ?? '')
+    const note = String(req.body?.note ?? '').trim()
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ error: 'Enter a valid payment amount.' })
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: 'Valid date is required (YYYY-MM-DD).' })
+    }
+
+    await db.execute({
+      sql: `INSERT INTO payments (id, student_id, amount, date, note)
+            VALUES (?, ?, ?, ?, ?)`,
+      args: [crypto.randomUUID(), req.params.id, amount, date, note],
+    })
+
+    const row = await getStudentRow(req.params.id)
+    res.status(201).json(await mapStudent(row))
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.delete('/api/payments/:id', async (req, res, next) => {
+  try {
+    const payment = await db.execute({
+      sql: 'SELECT student_id FROM payments WHERE id = ?',
+      args: [req.params.id],
+    })
+
+    if (!payment.rows[0]) {
+      return res.status(404).json({ error: 'Payment not found.' })
+    }
+
+    await db.execute({
+      sql: 'DELETE FROM payments WHERE id = ?',
+      args: [req.params.id],
+    })
+
+    const row = await getStudentRow(payment.rows[0].student_id)
+    res.json(await mapStudent(row))
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.use((error, _req, res, _next) => {
+  console.error(error)
+  res.status(500).json({
+    error:
+      error instanceof Error
+        ? error.message
+        : 'Unexpected server error. Check database configuration.',
   })
-
-  tx()
-
-  const rows = db
-    .prepare('SELECT * FROM students ORDER BY created_at DESC')
-    .all()
-  res.json(rows.map(mapStudent))
 })
 
-app.post('/api/students/:id/payments', (req, res) => {
-  const student = db
-    .prepare('SELECT id FROM students WHERE id = ?')
-    .get(req.params.id)
+export default app
 
-  if (!student) {
-    return res.status(404).json({ error: 'Student not found.' })
-  }
-
-  const amount = Number(req.body?.amount)
-  const date = String(req.body?.date ?? '')
-  const note = String(req.body?.note ?? '').trim()
-
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return res.status(400).json({ error: 'Enter a valid payment amount.' })
-  }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    return res.status(400).json({ error: 'Valid date is required (YYYY-MM-DD).' })
-  }
-
-  db.prepare(
-    `INSERT INTO payments (id, student_id, amount, date, note)
-     VALUES (?, ?, ?, ?, ?)`,
-  ).run(crypto.randomUUID(), req.params.id, amount, date, note)
-
-  const row = db
-    .prepare('SELECT * FROM students WHERE id = ?')
-    .get(req.params.id)
-
-  res.status(201).json(mapStudent(row))
-})
-
-app.delete('/api/payments/:id', (req, res) => {
-  const payment = db
-    .prepare('SELECT student_id FROM payments WHERE id = ?')
-    .get(req.params.id)
-
-  if (!payment) {
-    return res.status(404).json({ error: 'Payment not found.' })
-  }
-
-  db.prepare('DELETE FROM payments WHERE id = ?').run(req.params.id)
-
-  const row = db
-    .prepare('SELECT * FROM students WHERE id = ?')
-    .get(payment.student_id)
-
-  res.json(mapStudent(row))
-})
-
-app.listen(PORT, () => {
-  console.log(`Student CRM API running on http://localhost:${PORT}`)
-})
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`Student CRM API running on http://localhost:${PORT}`)
+    console.log(
+      process.env.TURSO_DATABASE_URL
+        ? 'Using Turso remote database'
+        : 'Using local SQLite file (server/data/student-crm.db)',
+    )
+  })
+}
