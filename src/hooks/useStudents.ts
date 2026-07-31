@@ -95,7 +95,7 @@ export function useStudents() {
   async function markAttendance(
     studentId: string,
     date: string,
-    status: AttendanceStatus,
+    status: AttendanceStatus | null,
   ) {
     const updated = await request<Student>(
       `/api/students/${studentId}/attendance`,

@@ -7,7 +7,7 @@ interface AttendanceViewProps {
   onMark: (
     studentId: string,
     date: string,
-    status: AttendanceStatus,
+    status: AttendanceStatus | null,
   ) => Promise<unknown>
   onMarkAll: (date: string, status: AttendanceStatus) => Promise<unknown>
 }
@@ -112,9 +112,13 @@ export function AttendanceView({
                       className={`status-btn status-${s.value}${current === s.value ? ' is-selected' : ''}`}
                       onClick={async () => {
                         try {
-                          await onMark(student.id, date, s.value)
+                          const nextStatus =
+                            current === s.value ? null : s.value
+                          await onMark(student.id, date, nextStatus)
                           showToast(
-                            `${student.name} marked ${s.label.toLowerCase()}`,
+                            nextStatus
+                              ? `${student.name} marked ${s.label.toLowerCase()}`
+                              : `${student.name} attendance cleared`,
                             'success',
                           )
                         } catch (err) {

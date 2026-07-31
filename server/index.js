@@ -272,15 +272,15 @@ app.put('/api/students/:id/attendance', requireAuth, requireAdmin, async (req, r
     }
 
     const date = String(req.body?.date ?? '')
-    const status = String(req.body?.status ?? '')
+    const status = req.body?.status == null ? null : String(req.body.status)
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return res.status(400).json({ error: 'Valid date is required (YYYY-MM-DD).' })
     }
-    if (!['present', 'absent', 'late'].includes(status)) {
+    if (status !== null && !['present', 'absent', 'late'].includes(status)) {
       return res
         .status(400)
-        .json({ error: 'Status must be present, absent, or late.' })
+        .json({ error: 'Status must be present, absent, late, or cleared.' })
     }
 
     const existing = await db.execute({
@@ -288,7 +288,14 @@ app.put('/api/students/:id/attendance', requireAuth, requireAdmin, async (req, r
       args: [req.params.id, date],
     })
 
-    if (existing.rows[0]) {
+    if (status === null) {
+      if (existing.rows[0]) {
+        await db.execute({
+          sql: 'DELETE FROM attendance WHERE id = ?',
+          args: [existing.rows[0].id],
+        })
+      }
+    } else if (existing.rows[0]) {
       await db.execute({
         sql: 'UPDATE attendance SET status = ? WHERE id = ?',
         args: [status, existing.rows[0].id],
