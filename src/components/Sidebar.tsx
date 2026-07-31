@@ -54,9 +54,19 @@ export function Sidebar({
         <p className="sidebar-note">
           Signed in as {user.username} ({user.role})
         </p>
-        <button type="button" className="btn small ghost logout-btn" onClick={onLogout}>
-          Log out
-        </button>
+        <div className="auth-actions">
+          <button type="button" className="btn small ghost" onClick={onLogout}>
+            Logout
+          </button>
+          <button
+            type="button"
+            className="btn small primary"
+            onClick={onLogout}
+            title="Logout and open login screen"
+          >
+            Login
+          </button>
+        </div>
       </div>
     </aside>
   )

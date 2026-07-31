@@ -32,7 +32,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
           <span className="brand-mark" aria-hidden="true" />
           <div>
             <h1>Agm-Chess Classes</h1>
-            <p className="muted">Sign in to continue</p>
+            <p className="muted">Login to continue</p>
           </div>
         </div>
 
@@ -61,7 +61,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
         {error ? <p className="form-error">{error}</p> : null}
 
         <button type="submit" className="btn primary login-submit" disabled={saving}>
-          {saving ? 'Signing in…' : 'Sign in'}
+          {saving ? 'Logging in…' : 'Login'}
         </button>
 
         <div className="login-hint">

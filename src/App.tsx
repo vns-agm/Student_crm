@@ -51,6 +51,25 @@ function AuthenticatedApp({
         onLogout={onLogout}
       />
       <main className="main">
+        <div className="top-auth-bar">
+          <p className="muted compact">
+            {user.username} · {user.role}
+          </p>
+          <div className="auth-actions">
+            <button type="button" className="btn small ghost" onClick={onLogout}>
+              Logout
+            </button>
+            <button
+              type="button"
+              className="btn small primary"
+              onClick={onLogout}
+              title="Go to login screen"
+            >
+              Login
+            </button>
+          </div>
+        </div>
+
         {loading ? (
           <section className="panel">
             <p className="muted">Loading students from the database…</p>
