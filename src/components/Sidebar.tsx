@@ -20,7 +20,7 @@ export function Sidebar({ current, onChange, studentCount }: SidebarProps) {
       <div className="brand">
         <span className="brand-mark" aria-hidden="true" />
         <div>
-          <p className="brand-name">ClassLedger</p>
+          <p className="brand-name">Agm-Chess Classes</p>
           <p className="brand-tag">Student CRM</p>
         </div>
       </div>
