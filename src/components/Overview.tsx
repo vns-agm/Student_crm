@@ -71,7 +71,7 @@ export function Overview({
         ) : null}
       </header>
 
-      <div className="stat-grid">
+      <div className={`stat-grid${readOnly ? ' parent-stats' : ''}`}>
         <article className="stat-card">
           <p className="stat-label">Students</p>
           <p className="stat-value">{students.length}</p>
@@ -92,26 +92,28 @@ export function Overview({
             </button>
           ) : null}
         </article>
-        <article className="stat-card">
-          <p className="stat-label">Fees collected</p>
-          <p className="stat-value">
-            ₹{totalFeesCollected.toLocaleString('en-IN')}
-          </p>
-          {!readOnly ? (
-            <button type="button" className="link-btn" onClick={onGoFees}>
-              Record payment
-            </button>
-          ) : null}
-        </article>
-        <article className="stat-card">
-          <p className="stat-label">Outstanding</p>
-          <p className="stat-value accent">
-            ₹{totalOutstanding.toLocaleString('en-IN')}
-          </p>
-          <p className="stat-sub muted">
-            {markedToday}/{students.length} marked today
-          </p>
-        </article>
+        {!readOnly ? (
+          <>
+            <article className="stat-card">
+              <p className="stat-label">Fees collected</p>
+              <p className="stat-value">
+                ₹{totalFeesCollected.toLocaleString('en-IN')}
+              </p>
+              <button type="button" className="link-btn" onClick={onGoFees}>
+                Record payment
+              </button>
+            </article>
+            <article className="stat-card">
+              <p className="stat-label">Outstanding</p>
+              <p className="stat-value accent">
+                ₹{totalOutstanding.toLocaleString('en-IN')}
+              </p>
+              <p className="stat-sub muted">
+                {markedToday}/{students.length} marked today
+              </p>
+            </article>
+          </>
+        ) : null}
       </div>
 
       <div className="table-wrap">
