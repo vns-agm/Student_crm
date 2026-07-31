@@ -63,13 +63,6 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
         <button type="submit" className="btn primary login-submit" disabled={saving}>
           {saving ? 'Logging in…' : 'Login'}
         </button>
-
-        <div className="login-hint">
-          <p className="muted compact">Admin: full access · Parent: overview only</p>
-          <p className="muted compact">
-            Defaults — admin / admin123 · parent / parent123
-          </p>
-        </div>
       </form>
     </div>
   )
