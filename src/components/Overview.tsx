@@ -51,9 +51,6 @@ export function Overview({
       <header className="panel-header">
         <div>
           <h1>Overview</h1>
-          <p className="muted">
-            Live data from your SQLite database — attendance, fees, and profiles.
-          </p>
         </div>
         <div className="header-controls">
           <button
