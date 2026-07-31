@@ -9,7 +9,20 @@ const BATCHES = new Set(['beginner', 'intermediate', 'advanced'])
 app.use(cors())
 app.use(express.json())
 
-app.use(async (_req, _res, next) => {
+app.get('/api/health', (_req, res) => {
+  res.json({
+    ok: true,
+    database: process.env.TURSO_DATABASE_URL
+      ? 'turso'
+      : process.env.VERCEL
+        ? 'missing-turso'
+        : 'local-file',
+    vercel: Boolean(process.env.VERCEL),
+  })
+})
+
+app.use(async (req, res, next) => {
+  if (req.path === '/api/health') return next()
   try {
     await ensureDb()
     next()
@@ -106,13 +119,6 @@ async function getStudentRow(id) {
   })
   return result.rows[0] ?? null
 }
-
-app.get('/api/health', (_req, res) => {
-  res.json({
-    ok: true,
-    database: process.env.TURSO_DATABASE_URL ? 'turso' : 'local-file',
-  })
-})
 
 app.get('/api/students', async (_req, res, next) => {
   try {

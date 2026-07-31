@@ -44,8 +44,9 @@ function App() {
             <div className="banner-error">
               <p>{error}</p>
               <p className="muted compact">
-                Make sure the API is running (`npm run dev` starts both the
-                database API and the app).
+                {import.meta.env.PROD
+                  ? 'On Vercel, set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN in Project Settings → Environment Variables, then redeploy. Locally, run npm run dev.'
+                  : 'Make sure the API is running (`npm run dev` starts both the database API and the app).'}
               </p>
               <button type="button" className="btn primary" onClick={() => void refresh()}>
                 Retry

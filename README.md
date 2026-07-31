@@ -23,21 +23,42 @@ npm run dev
 
 Local data is stored in `server/data/student-crm.db` (no Turso needed).
 
-## Deploy on Vercel (live data)
+## Deploy on Vercel (required for live data)
 
-Vercel cannot keep a local SQLite file. Use a free **Turso** database:
+Vercel cannot keep a local SQLite file. You **must** add a Turso database or the app will show an API error after deploy.
 
-1. Create an account at [turso.tech](https://turso.tech)
-2. Create a database and copy:
-   - `TURSO_DATABASE_URL`
+### 1. Create Turso DB (free)
+
+1. Sign up at [turso.tech](https://turso.tech)
+2. Install CLI (optional) or use the dashboard
+3. Create a database and copy:
+   - `TURSO_DATABASE_URL` (starts with `libsql://...`)
    - `TURSO_AUTH_TOKEN`
-3. Deploy this repo to Vercel
-4. In the Vercel project → **Settings → Environment Variables**, add both values
-5. Redeploy
 
-After that, `/api/*` runs as a Vercel serverless function and all CRM data persists in Turso.
+### 2. Add env vars in Vercel
 
-Optional: copy `.env.example` to `.env` and set the same Turso values locally if you want local + production to share one database.
+In your Vercel project:
+
+**Settings → Environment Variables**
+
+| Name | Value |
+| --- | --- |
+| `TURSO_DATABASE_URL` | your Turso URL |
+| `TURSO_AUTH_TOKEN` | your Turso token |
+
+Apply to **Production**, **Preview**, and **Development**, then **Redeploy**.
+
+### 3. Verify
+
+Open `https://YOUR-APP.vercel.app/api/health`
+
+You should see:
+
+```json
+{ "ok": true, "database": "turso", "vercel": true }
+```
+
+If `database` is `"missing-turso"`, the env vars are not set (or you need to redeploy after adding them).
 
 ## Build
 

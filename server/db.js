@@ -6,11 +6,16 @@ import { createClient } from '@libsql/client'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 function createDbClient() {
-  if (process.env.TURSO_DATABASE_URL) {
-    return createClient({
-      url: process.env.TURSO_DATABASE_URL,
-      authToken: process.env.TURSO_AUTH_TOKEN,
-    })
+  const url = process.env.TURSO_DATABASE_URL?.trim()
+  const authToken = process.env.TURSO_AUTH_TOKEN?.trim()
+
+  if (url) {
+    return createClient({ url, authToken })
+  }
+
+  if (process.env.VERCEL) {
+    // Avoid crashing at import time; ensureDb() returns a clear API error.
+    return null
   }
 
   const dataDir = path.join(__dirname, 'data')
@@ -38,6 +43,12 @@ let initPromise
 export function ensureDb() {
   if (!initPromise) {
     initPromise = (async () => {
+      if (!db) {
+        throw new Error(
+          'Database not configured for Vercel. Add TURSO_DATABASE_URL and TURSO_AUTH_TOKEN in Vercel → Settings → Environment Variables, then redeploy.',
+        )
+      }
+
       await db.executeMultiple(`
         CREATE TABLE IF NOT EXISTS students (
           id TEXT PRIMARY KEY,
