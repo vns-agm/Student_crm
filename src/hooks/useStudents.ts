@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
+import { getAuthToken } from './useAuth'
 import type { AttendanceStatus, Student, StudentDetailsInput } from '../types'
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
+  const token = getAuthToken()
   const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json', ...(options?.headers ?? {}) },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options?.headers ?? {}),
+    },
     ...options,
   })
 

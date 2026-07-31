@@ -1,5 +1,11 @@
 import cors from 'cors'
 import express from 'express'
+import {
+  createToken,
+  hashPassword,
+  requireAdmin,
+  requireAuth,
+} from './auth.js'
 import { db, ensureDb } from './db.js'
 
 const app = express()
@@ -120,7 +126,43 @@ async function getStudentRow(id) {
   return result.rows[0] ?? null
 }
 
-app.get('/api/students', async (_req, res, next) => {
+app.post('/api/login', async (req, res, next) => {
+  try {
+    const username = String(req.body?.username ?? '').trim()
+    const password = String(req.body?.password ?? '')
+
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password are required.' })
+    }
+
+    const result = await db.execute({
+      sql: 'SELECT id, username, password_hash, role FROM users WHERE username = ?',
+      args: [username],
+    })
+    const user = result.rows[0]
+    if (!user || user.password_hash !== hashPassword(password)) {
+      return res.status(401).json({ error: 'Invalid username or password.' })
+    }
+
+    const token = createToken(user)
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+      },
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/me', requireAuth, (req, res) => {
+  res.json({ user: req.user })
+})
+
+app.get('/api/students', requireAuth, async (_req, res, next) => {
   try {
     const result = await db.execute(
       'SELECT * FROM students ORDER BY created_at DESC',
@@ -132,7 +174,7 @@ app.get('/api/students', async (_req, res, next) => {
   }
 })
 
-app.post('/api/students', async (req, res, next) => {
+app.post('/api/students', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const parsed = parseStudentBody(req.body)
     if (parsed.error) {
@@ -168,7 +210,7 @@ app.post('/api/students', async (req, res, next) => {
   }
 })
 
-app.put('/api/students/:id', async (req, res, next) => {
+app.put('/api/students/:id', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const existing = await getStudentRow(req.params.id)
     if (!existing) {
@@ -205,7 +247,7 @@ app.put('/api/students/:id', async (req, res, next) => {
   }
 })
 
-app.delete('/api/students/:id', async (req, res, next) => {
+app.delete('/api/students/:id', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const result = await db.execute({
       sql: 'DELETE FROM students WHERE id = ?',
@@ -222,7 +264,7 @@ app.delete('/api/students/:id', async (req, res, next) => {
   }
 })
 
-app.put('/api/students/:id/attendance', async (req, res, next) => {
+app.put('/api/students/:id/attendance', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const student = await getStudentRow(req.params.id)
     if (!student) {
@@ -266,7 +308,7 @@ app.put('/api/students/:id/attendance', async (req, res, next) => {
   }
 })
 
-app.put('/api/attendance/bulk', async (req, res, next) => {
+app.put('/api/attendance/bulk', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const date = String(req.body?.date ?? '')
     const status = String(req.body?.status ?? '')
@@ -317,7 +359,7 @@ app.put('/api/attendance/bulk', async (req, res, next) => {
   }
 })
 
-app.post('/api/students/:id/payments', async (req, res, next) => {
+app.post('/api/students/:id/payments', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const student = await getStudentRow(req.params.id)
     if (!student) {
@@ -348,7 +390,7 @@ app.post('/api/students/:id/payments', async (req, res, next) => {
   }
 })
 
-app.delete('/api/payments/:id', async (req, res, next) => {
+app.delete('/api/payments/:id', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const payment = await db.execute({
       sql: 'SELECT student_id FROM payments WHERE id = ?',

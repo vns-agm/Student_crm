@@ -45,3 +45,11 @@ export type View =
   | 'students'
   | 'attendance'
   | 'fees'
+
+export type UserRole = 'admin' | 'parent'
+
+export interface AuthUser {
+  id: string
+  username: string
+  role: UserRole
+}

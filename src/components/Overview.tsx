@@ -11,6 +11,7 @@ import {
 
 interface OverviewProps {
   students: Student[]
+  readOnly?: boolean
   onGoAdd: () => void
   onGoStudents: () => void
   onGoAttendance: () => void
@@ -24,6 +25,7 @@ function batchLabel(batch: Batch) {
 
 export function Overview({
   students,
+  readOnly = false,
   onGoAdd,
   onGoStudents,
   onGoAttendance,
@@ -52,44 +54,54 @@ export function Overview({
         <div>
           <h1>Overview</h1>
         </div>
-        <div className="header-controls">
-          <button
-            type="button"
-            className="btn ghost"
-            onClick={() => exportStudentsToCsv(students)}
-            disabled={students.length === 0}
-          >
-            Export CSV
-          </button>
-          <button type="button" className="btn primary" onClick={onGoAdd}>
-            Add student details
-          </button>
-        </div>
+        {!readOnly ? (
+          <div className="header-controls">
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={() => exportStudentsToCsv(students)}
+              disabled={students.length === 0}
+            >
+              Export CSV
+            </button>
+            <button type="button" className="btn primary" onClick={onGoAdd}>
+              Add student details
+            </button>
+          </div>
+        ) : null}
       </header>
 
       <div className="stat-grid">
         <article className="stat-card">
           <p className="stat-label">Students</p>
           <p className="stat-value">{students.length}</p>
-          <button type="button" className="link-btn" onClick={onGoStudents}>
-            Manage students
-          </button>
+          {!readOnly ? (
+            <button type="button" className="link-btn" onClick={onGoStudents}>
+              Manage students
+            </button>
+          ) : (
+            <p className="stat-sub muted">Parent view</p>
+          )}
         </article>
         <article className="stat-card">
           <p className="stat-label">Avg attendance</p>
           <p className="stat-value">{avgAttendance}%</p>
-          <button type="button" className="link-btn" onClick={onGoAttendance}>
-            Take roll call
-          </button>
+          {!readOnly ? (
+            <button type="button" className="link-btn" onClick={onGoAttendance}>
+              Take roll call
+            </button>
+          ) : null}
         </article>
         <article className="stat-card">
           <p className="stat-label">Fees collected</p>
           <p className="stat-value">
             ₹{totalFeesCollected.toLocaleString('en-IN')}
           </p>
-          <button type="button" className="link-btn" onClick={onGoFees}>
-            Record payment
-          </button>
+          {!readOnly ? (
+            <button type="button" className="link-btn" onClick={onGoFees}>
+              Record payment
+            </button>
+          ) : null}
         </article>
         <article className="stat-card">
           <p className="stat-label">Outstanding</p>
@@ -119,7 +131,7 @@ export function Overview({
             {students.length === 0 ? (
               <tr>
                 <td colSpan={7} className="empty-cell">
-                  Database is empty. Add student details to get started.
+                  No student records to show yet.
                 </td>
               </tr>
             ) : (
@@ -149,26 +161,28 @@ export function Overview({
                     >
                       <EyeIcon />
                     </button>
-                    <button
-                      type="button"
-                      className="btn small icon-btn danger"
-                      aria-label={`Delete ${s.name}`}
-                      title="Delete student"
-                      onClick={async () => {
-                        if (!confirm(`Remove ${s.name}?`)) return
-                        try {
-                          await onDelete(s.id)
-                        } catch (err) {
-                          alert(
-                            err instanceof Error
-                              ? err.message
-                              : 'Could not delete student.',
-                          )
-                        }
-                      }}
-                    >
-                      <TrashIcon />
-                    </button>
+                    {!readOnly ? (
+                      <button
+                        type="button"
+                        className="btn small icon-btn danger"
+                        aria-label={`Delete ${s.name}`}
+                        title="Delete student"
+                        onClick={async () => {
+                          if (!confirm(`Remove ${s.name}?`)) return
+                          try {
+                            await onDelete(s.id)
+                          } catch (err) {
+                            alert(
+                              err instanceof Error
+                                ? err.message
+                                : 'Could not delete student.',
+                            )
+                          }
+                        }}
+                      >
+                        <TrashIcon />
+                      </button>
+                    ) : null}
                   </td>
                 </tr>
               ))

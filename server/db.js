@@ -80,6 +80,14 @@ export function ensureDb() {
           note TEXT NOT NULL DEFAULT '',
           FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
         );
+
+        CREATE TABLE IF NOT EXISTS users (
+          id TEXT PRIMARY KEY,
+          username TEXT NOT NULL UNIQUE,
+          password_hash TEXT NOT NULL,
+          role TEXT NOT NULL CHECK (role IN ('admin', 'parent')),
+          created_at TEXT NOT NULL
+        );
       `)
 
       await ensureColumn('students', 'payment_date', "TEXT NOT NULL DEFAULT ''")
@@ -87,6 +95,32 @@ export function ensureDb() {
       await ensureColumn('students', 'fees_per_class', 'REAL NOT NULL DEFAULT 0')
       await ensureColumn('students', 'batch', "TEXT NOT NULL DEFAULT 'beginner'")
       await ensureColumn('students', 'amount_paid', 'REAL NOT NULL DEFAULT 0')
+
+      const { hashPassword } = await import('./auth.js')
+      const defaults = [
+        { username: 'admin', password: 'admin123', role: 'admin' },
+        { username: 'parent', password: 'parent123', role: 'parent' },
+      ]
+
+      for (const account of defaults) {
+        const existing = await db.execute({
+          sql: 'SELECT id FROM users WHERE username = ?',
+          args: [account.username],
+        })
+        if (!existing.rows[0]) {
+          await db.execute({
+            sql: `INSERT INTO users (id, username, password_hash, role, created_at)
+                  VALUES (?, ?, ?, ?, ?)`,
+            args: [
+              crypto.randomUUID(),
+              account.username,
+              hashPassword(account.password),
+              account.role,
+              new Date().toISOString(),
+            ],
+          })
+        }
+      }
     })()
   }
 

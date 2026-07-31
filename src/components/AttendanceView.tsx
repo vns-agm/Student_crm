@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { AttendanceStatus, Student } from '../types'
+import { useToast } from './ToastProvider'
 
 interface AttendanceViewProps {
   students: Student[]
@@ -27,6 +28,7 @@ export function AttendanceView({
   onMarkAll,
 }: AttendanceViewProps) {
   const [date, setDate] = useState(todayISO)
+  const { showToast } = useToast()
 
   function statusFor(student: Student): AttendanceStatus | null {
     return student.attendance.find((a) => a.date === date)?.status ?? null
@@ -69,11 +71,13 @@ export function AttendanceView({
             onClick={async () => {
               try {
                 await onMarkAll(date, s.value)
+                showToast(`All students marked ${s.label.toLowerCase()}`, 'success')
               } catch (err) {
-                alert(
+                showToast(
                   err instanceof Error
                     ? err.message
                     : 'Could not update attendance.',
+                  'error',
                 )
               }
             }}
@@ -96,7 +100,11 @@ export function AttendanceView({
                   <p className="name-cell">{student.name}</p>
                   <p className="muted compact">Age {student.age}</p>
                 </div>
-                <div className="status-group" role="group" aria-label={`Attendance for ${student.name}`}>
+                <div
+                  className="status-group"
+                  role="group"
+                  aria-label={`Attendance for ${student.name}`}
+                >
                   {statuses.map((s) => (
                     <button
                       key={s.value}
@@ -105,11 +113,16 @@ export function AttendanceView({
                       onClick={async () => {
                         try {
                           await onMark(student.id, date, s.value)
+                          showToast(
+                            `${student.name} marked ${s.label.toLowerCase()}`,
+                            'success',
+                          )
                         } catch (err) {
-                          alert(
+                          showToast(
                             err instanceof Error
                               ? err.message
                               : 'Could not update attendance.',
+                            'error',
                           )
                         }
                       }}

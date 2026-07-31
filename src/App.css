@@ -633,3 +633,86 @@ select:focus {
   background: rgba(180, 35, 24, 0.1);
   color: var(--absent);
 }
+
+.logout-btn {
+  margin-top: 0.65rem;
+  width: 100%;
+}
+
+.toast-stack {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  max-width: min(360px, calc(100vw - 2rem));
+}
+
+.toast {
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #fff;
+  box-shadow: var(--shadow);
+  font-weight: 600;
+  animation: rise 180ms ease;
+}
+
+.toast-success {
+  border-color: rgba(15, 118, 110, 0.3);
+  background: #ecfdf8;
+  color: var(--ok);
+}
+
+.toast-error {
+  border-color: rgba(180, 35, 24, 0.25);
+  background: #fff5f5;
+  color: var(--danger);
+}
+
+.toast-info {
+  border-color: rgba(29, 79, 145, 0.25);
+  background: #eef4fb;
+  color: var(--brand);
+}
+
+.login-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+}
+
+.login-card {
+  width: min(420px, 100%);
+  padding: 1.5rem;
+  border-radius: var(--radius);
+  border: 1px solid rgba(208, 218, 232, 0.95);
+  background: var(--surface-strong);
+  box-shadow: var(--shadow);
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  margin-bottom: 1.25rem;
+}
+
+.login-brand h1 {
+  margin: 0;
+  font-size: 1.45rem;
+}
+
+.login-submit {
+  width: 100%;
+  margin-top: 0.25rem;
+}
+
+.login-hint {
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line);
+}

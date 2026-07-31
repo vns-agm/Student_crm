@@ -1,16 +1,26 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AddStudentView } from './components/AddStudentView'
 import { AttendanceView } from './components/AttendanceView'
 import { FeesView } from './components/FeesView'
+import { LoginScreen } from './components/LoginScreen'
 import { Overview } from './components/Overview'
 import { Sidebar } from './components/Sidebar'
 import { StudentsView } from './components/StudentsView'
+import { ToastProvider } from './components/ToastProvider'
+import { useAuth } from './hooks/useAuth'
 import { useStudents } from './hooks/useStudents'
 import type { View } from './types'
 import './App.css'
 
-function App() {
+function AuthenticatedApp({
+  user,
+  onLogout,
+}: {
+  user: { id: string; username: string; role: 'admin' | 'parent' }
+  onLogout: () => void
+}) {
   const [view, setView] = useState<View>('overview')
+  const isAdmin = user.role === 'admin'
   const {
     students,
     loading,
@@ -25,12 +35,20 @@ function App() {
     deletePayment,
   } = useStudents()
 
+  useEffect(() => {
+    if (!isAdmin && view !== 'overview') {
+      setView('overview')
+    }
+  }, [isAdmin, view])
+
   return (
     <div className="app-shell">
       <Sidebar
         current={view}
         onChange={setView}
         studentCount={students.length}
+        user={user}
+        onLogout={onLogout}
       />
       <main className="main">
         {loading ? (
@@ -48,7 +66,11 @@ function App() {
                   ? 'On Vercel, set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN in Project Settings → Environment Variables, then redeploy. Locally, run npm run dev.'
                   : 'Make sure the API is running (`npm run dev` starts both the database API and the app).'}
               </p>
-              <button type="button" className="btn primary" onClick={() => void refresh()}>
+              <button
+                type="button"
+                className="btn primary"
+                onClick={() => void refresh()}
+              >
                 Retry
               </button>
             </div>
@@ -58,6 +80,7 @@ function App() {
         {!loading && !error && view === 'overview' ? (
           <Overview
             students={students}
+            readOnly={!isAdmin}
             onGoAdd={() => setView('add-student')}
             onGoStudents={() => setView('students')}
             onGoAttendance={() => setView('attendance')}
@@ -66,14 +89,14 @@ function App() {
           />
         ) : null}
 
-        {!loading && !error && view === 'add-student' ? (
+        {!loading && !error && isAdmin && view === 'add-student' ? (
           <AddStudentView
             onAdd={addStudent}
             onGoStudents={() => setView('students')}
           />
         ) : null}
 
-        {!loading && !error && view === 'students' ? (
+        {!loading && !error && isAdmin && view === 'students' ? (
           <StudentsView
             students={students}
             onUpdate={updateStudent}
@@ -82,7 +105,7 @@ function App() {
           />
         ) : null}
 
-        {!loading && !error && view === 'attendance' ? (
+        {!loading && !error && isAdmin && view === 'attendance' ? (
           <AttendanceView
             students={students}
             onMark={markAttendance}
@@ -90,7 +113,7 @@ function App() {
           />
         ) : null}
 
-        {!loading && !error && view === 'fees' ? (
+        {!loading && !error && isAdmin && view === 'fees' ? (
           <FeesView
             students={students}
             onAddPayment={addPayment}
@@ -99,6 +122,28 @@ function App() {
         ) : null}
       </main>
     </div>
+  )
+}
+
+function App() {
+  const { user, checking, login, logout } = useAuth()
+
+  if (checking) {
+    return (
+      <div className="login-screen">
+        <p className="muted">Checking session…</p>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return <LoginScreen onLogin={login} />
+  }
+
+  return (
+    <ToastProvider>
+      <AuthenticatedApp user={user} onLogout={logout} />
+    </ToastProvider>
   )
 }
 

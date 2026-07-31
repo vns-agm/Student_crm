@@ -1,20 +1,30 @@
-import type { View } from '../types'
+import type { AuthUser, UserRole, View } from '../types'
 
 interface SidebarProps {
   current: View
   onChange: (view: View) => void
   studentCount: number
+  user: AuthUser
+  onLogout: () => void
 }
 
-const links: { id: View; label: string; hint: string }[] = [
-  { id: 'overview', label: 'Overview', hint: 'Snapshot' },
-  { id: 'add-student', label: 'Add student', hint: 'New details' },
-  { id: 'students', label: 'Students', hint: 'All records' },
-  { id: 'attendance', label: 'Attendance', hint: 'Daily roll' },
-  { id: 'fees', label: 'Fees', hint: 'Payments' },
+const allLinks: { id: View; label: string; hint: string; roles: UserRole[] }[] = [
+  { id: 'overview', label: 'Overview', hint: 'Snapshot', roles: ['admin', 'parent'] },
+  { id: 'add-student', label: 'Add student', hint: 'New details', roles: ['admin'] },
+  { id: 'students', label: 'Students', hint: 'All records', roles: ['admin'] },
+  { id: 'attendance', label: 'Attendance', hint: 'Daily roll', roles: ['admin'] },
+  { id: 'fees', label: 'Fees', hint: 'Payments', roles: ['admin'] },
 ]
 
-export function Sidebar({ current, onChange, studentCount }: SidebarProps) {
+export function Sidebar({
+  current,
+  onChange,
+  studentCount,
+  user,
+  onLogout,
+}: SidebarProps) {
+  const links = allLinks.filter((link) => link.roles.includes(user.role))
+
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -41,7 +51,12 @@ export function Sidebar({ current, onChange, studentCount }: SidebarProps) {
 
       <div className="sidebar-foot">
         <p className="sidebar-stat">{studentCount} students</p>
-        <p className="sidebar-note">Stored in SQLite database</p>
+        <p className="sidebar-note">
+          Signed in as {user.username} ({user.role})
+        </p>
+        <button type="button" className="btn small ghost logout-btn" onClick={onLogout}>
+          Log out
+        </button>
       </div>
     </aside>
   )
