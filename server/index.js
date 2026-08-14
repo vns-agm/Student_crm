@@ -515,7 +515,7 @@ async function loadTournament(id) {
   }
 }
 
-app.get('/api/tournaments', requireAuth, requireAdmin, async (_req, res, next) => {
+app.get('/api/tournaments', requireAuth, async (_req, res, next) => {
   try {
     const result = await db.execute(
       'SELECT * FROM tournaments ORDER BY created_at DESC',

@@ -49,7 +49,7 @@ function AuthenticatedApp({
   } = useTournaments()
 
   useEffect(() => {
-    if (!isAdmin && view !== 'overview') {
+    if (!isAdmin && view !== 'overview' && view !== 'tournament') {
       setView('overview')
     }
   }, [isAdmin, view])
@@ -153,12 +153,13 @@ function AuthenticatedApp({
           />
         ) : null}
 
-        {!loading && !error && isAdmin && view === 'tournament' ? (
+        {!loading && !error && view === 'tournament' ? (
           <TournamentView
             students={students}
             tournaments={tournaments}
             loading={tournamentsLoading}
             error={tournamentsError}
+            readOnly={!isAdmin}
             onCreate={createTournament}
             onDelete={deleteTournament}
             onAddPlayer={addPlayer}

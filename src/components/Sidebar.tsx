@@ -14,7 +14,7 @@ const allLinks: { id: View; label: string; hint: string; roles: UserRole[] }[] =
   { id: 'students', label: 'Students', hint: 'All records', roles: ['admin'] },
   { id: 'attendance', label: 'Attendance', hint: 'Daily roll', roles: ['admin'] },
   { id: 'fees', label: 'Fees', hint: 'Payments', roles: ['admin'] },
-  { id: 'tournament', label: 'Tournament', hint: 'Swiss pairing', roles: ['admin'] },
+  { id: 'tournament', label: 'Tournament', hint: 'Swiss pairing', roles: ['admin', 'parent'] },
 ]
 
 export function Sidebar({

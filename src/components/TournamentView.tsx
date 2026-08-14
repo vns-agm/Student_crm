@@ -9,6 +9,7 @@ interface TournamentViewProps {
   tournaments: Tournament[]
   loading: boolean
   error: string
+  readOnly?: boolean
   onCreate: (name: string) => Promise<Tournament>
   onDelete: (id: string) => Promise<unknown>
   onAddPlayer: (
@@ -34,11 +35,20 @@ function statusLabel(status: string) {
   return 'Completed'
 }
 
+function resultLabel(result: PairingResult | null | undefined) {
+  if (result === '1-0') return '1-0 (White)'
+  if (result === '0-1') return '0-1 (Black)'
+  if (result === '1/2-1/2') return '½-½ Draw'
+  if (result === 'bye') return 'Bye (1 pt)'
+  return 'Pending'
+}
+
 export function TournamentView({
   students,
   tournaments,
   loading,
   error,
+  readOnly = false,
   onCreate,
   onDelete,
   onAddPlayer,
@@ -165,29 +175,32 @@ export function TournamentView({
         <div>
           <h1>Tournament</h1>
           <p className="muted">
-            Open tournament — everyone plays together. After the last round, top 3
-            are listed for U-10, U-15, and Open.
+            {readOnly
+              ? 'Standings and round pairings. Results are entered by the admin.'
+              : 'Open tournament — everyone plays together. After the last round, top 3 are listed for U-10, U-15, and Open.'}
           </p>
         </div>
       </header>
 
-      <form className="form-card" onSubmit={handleCreate}>
-        <h2>Create tournament</h2>
-        <label>
-          Name
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Weekend Swiss"
-            required
-          />
-        </label>
-        <div className="form-actions">
-          <button type="submit" className="btn primary">
-            Create tournament
-          </button>
-        </div>
-      </form>
+      {!readOnly ? (
+        <form className="form-card" onSubmit={handleCreate}>
+          <h2>Create tournament</h2>
+          <label>
+            Name
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Weekend Swiss"
+              required
+            />
+          </label>
+          <div className="form-actions">
+            <button type="submit" className="btn primary">
+              Create tournament
+            </button>
+          </div>
+        </form>
+      ) : null}
 
       {tournaments.length > 0 ? (
         <div className="header-controls" style={{ marginBottom: '1rem' }}>
@@ -206,7 +219,11 @@ export function TournamentView({
           </label>
         </div>
       ) : (
-        <p className="muted">No tournaments yet. Create one to add players.</p>
+        <p className="muted">
+          {readOnly
+            ? 'No tournaments yet. Pairings and standings will appear here once the admin starts one.'
+            : 'No tournaments yet. Create one to add players.'}
+        </p>
       )}
 
       {selected ? (
@@ -226,7 +243,7 @@ export function TournamentView({
             </article>
           </div>
 
-          {selected.status === 'setup' ? (
+          {selected.status === 'setup' && !readOnly ? (
             <div className="fees-layout">
               <div className="form-card">
                 <h2>Add player</h2>
@@ -345,7 +362,7 @@ export function TournamentView({
                 </div>
               </div>
             </div>
-          ) : (
+          ) : !readOnly ? (
             <div className="form-actions" style={{ marginBottom: '1rem' }}>
               <button
                 type="button"
@@ -360,7 +377,7 @@ export function TournamentView({
                 Pair next round
               </button>
             </div>
-          )}
+          ) : null}
 
           <div className="table-wrap" style={{ marginBottom: '1.25rem' }}>
             <table>
@@ -368,14 +385,16 @@ export function TournamentView({
                 <tr>
                   <th>Player</th>
                   <th>Category</th>
-                  {selected.status === 'setup' ? <th /> : null}
+                  {selected.status === 'setup' && !readOnly ? <th /> : null}
                 </tr>
               </thead>
               <tbody>
                 {selected.players.length === 0 ? (
                   <tr>
-                    <td className="empty-cell" colSpan={3}>
-                      No players yet. Add students or enter names.
+                    <td className="empty-cell" colSpan={readOnly ? 2 : 3}>
+                      {readOnly
+                        ? 'No players listed yet.'
+                        : 'No players yet. Add students or enter names.'}
                     </td>
                   </tr>
                 ) : (
@@ -385,7 +404,7 @@ export function TournamentView({
                       <td>
                         <span className="pill">{categoryLabel(p.category)}</span>
                       </td>
-                      {selected.status === 'setup' ? (
+                      {selected.status === 'setup' && !readOnly ? (
                         <td className="row-actions">
                           <button
                             type="button"
@@ -440,8 +459,8 @@ export function TournamentView({
                         <td className="name-cell">{p.whiteName}</td>
                         <td className="name-cell">{p.blackName ?? 'BYE'}</td>
                         <td>
-                          {p.result === 'bye' ? (
-                            <span className="pill">Bye (1 pt)</span>
+                          {p.result === 'bye' || readOnly ? (
+                            <span className="pill">{resultLabel(p.result)}</span>
                           ) : (
                             <select
                               value={p.result ?? ''}
