@@ -60,6 +60,7 @@ export function ensureDb() {
           batch TEXT NOT NULL DEFAULT 'beginner',
           total_fees REAL NOT NULL DEFAULT 0,
           amount_paid REAL NOT NULL DEFAULT 0,
+          category TEXT NOT NULL DEFAULT 'open',
           created_at TEXT NOT NULL
         );
 
@@ -88,6 +89,36 @@ export function ensureDb() {
           role TEXT NOT NULL CHECK (role IN ('admin', 'parent')),
           created_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS tournaments (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          category TEXT NOT NULL DEFAULT 'open',
+          rounds INTEGER NOT NULL DEFAULT 0,
+          current_round INTEGER NOT NULL DEFAULT 0,
+          status TEXT NOT NULL DEFAULT 'setup',
+          created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS tournament_players (
+          id TEXT PRIMARY KEY,
+          tournament_id TEXT NOT NULL,
+          student_id TEXT,
+          name TEXT NOT NULL,
+          category TEXT NOT NULL DEFAULT 'open',
+          FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS tournament_pairings (
+          id TEXT PRIMARY KEY,
+          tournament_id TEXT NOT NULL,
+          round INTEGER NOT NULL,
+          board INTEGER NOT NULL,
+          white_id TEXT NOT NULL,
+          black_id TEXT,
+          result TEXT,
+          FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
+        );
       `)
 
       await ensureColumn('students', 'payment_date', "TEXT NOT NULL DEFAULT ''")
@@ -95,6 +126,8 @@ export function ensureDb() {
       await ensureColumn('students', 'fees_per_class', 'REAL NOT NULL DEFAULT 0')
       await ensureColumn('students', 'batch', "TEXT NOT NULL DEFAULT 'beginner'")
       await ensureColumn('students', 'amount_paid', 'REAL NOT NULL DEFAULT 0')
+      await ensureColumn('students', 'category', "TEXT NOT NULL DEFAULT 'open'")
+      await ensureColumn('tournament_players', 'category', "TEXT NOT NULL DEFAULT 'open'")
 
       const { hashPassword } = await import('./auth.js')
       const defaults = [

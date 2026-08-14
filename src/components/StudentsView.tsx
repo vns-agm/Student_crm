@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { attendanceRate, balanceDue, totalPaid } from '../hooks/useStudents'
-import { BATCH_OPTIONS } from '../types'
-import type { Batch, Student, StudentDetailsInput } from '../types'
+import { BATCH_OPTIONS, CATEGORY_OPTIONS } from '../types'
+import type { Batch, Category, Student, StudentDetailsInput } from '../types'
 import {
   ClassDetailsModal,
   EyeIcon,
@@ -24,10 +24,15 @@ const emptyForm = {
   feesPerClass: '',
   amountPaid: '',
   batch: '' as '' | Batch,
+  category: '' as '' | Category,
 }
 
 function batchLabel(batch: Batch) {
   return BATCH_OPTIONS.find((o) => o.value === batch)?.label ?? batch
+}
+
+function categoryLabel(category: Category) {
+  return CATEGORY_OPTIONS.find((o) => o.value === category)?.label ?? category
 }
 
 export function StudentsView({
@@ -65,6 +70,7 @@ export function StudentsView({
       feesPerClass: String(student.feesPerClass),
       amountPaid: String(student.amountPaid),
       batch: student.batch,
+      category: student.category ?? 'open',
     })
     setError('')
   }
@@ -117,6 +123,10 @@ export function StudentsView({
       setError('Select a batch.')
       return
     }
+    if (!form.category) {
+      setError('Select a category.')
+      return
+    }
 
     try {
       setSaving(true)
@@ -128,6 +138,7 @@ export function StudentsView({
         feesPerClass,
         amountPaid,
         batch: form.batch,
+        category: form.category,
       })
       resetForm()
     } catch (err) {
@@ -215,6 +226,25 @@ export function StudentsView({
               </select>
             </label>
           </div>
+          <label>
+            Category
+            <select
+              value={form.category}
+              onChange={(e) =>
+                setForm({ ...form, category: e.target.value as '' | Category })
+              }
+              required
+            >
+              <option value="" disabled>
+                Select category
+              </option>
+              {CATEGORY_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <div className="form-row two-col">
             <label>
               Number of classes
@@ -281,6 +311,7 @@ export function StudentsView({
               <th>Name</th>
               <th>Age</th>
               <th>Batch</th>
+              <th>Category</th>
               <th>Payment date</th>
               <th>Classes</th>
               <th>Fees / class</th>
@@ -294,7 +325,7 @@ export function StudentsView({
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={11} className="empty-cell">
+                <td colSpan={12} className="empty-cell">
                   {students.length === 0
                     ? 'No students in the database yet. Use Add student details.'
                     : 'No students match your search.'}
@@ -307,6 +338,9 @@ export function StudentsView({
                   <td>{s.age}</td>
                   <td>
                     <span className="pill">{batchLabel(s.batch)}</span>
+                  </td>
+                  <td>
+                    <span className="pill">{categoryLabel(s.category ?? 'open')}</span>
                   </td>
                   <td>{s.paymentDate || '—'}</td>
                   <td>{s.numberOfClasses}</td>

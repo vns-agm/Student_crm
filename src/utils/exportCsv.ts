@@ -1,9 +1,13 @@
 import { attendanceRate, balanceDue, totalPaid } from '../hooks/useStudents'
-import { BATCH_OPTIONS } from '../types'
-import type { Batch, Student } from '../types'
+import { BATCH_OPTIONS, CATEGORY_OPTIONS } from '../types'
+import type { Batch, Category, Student } from '../types'
 
 function batchLabel(batch: Batch) {
   return BATCH_OPTIONS.find((o) => o.value === batch)?.label ?? batch
+}
+
+function categoryLabel(category: Category) {
+  return CATEGORY_OPTIONS.find((o) => o.value === category)?.label ?? category
 }
 
 function escapeCsv(value: string | number) {
@@ -19,6 +23,7 @@ export function exportStudentsToCsv(students: Student[]) {
     'Name',
     'Age',
     'Batch',
+    'Category',
     'Payment Date',
     'Number of Classes',
     'Fees Per Class',
@@ -42,6 +47,7 @@ export function exportStudentsToCsv(students: Student[]) {
       student.name,
       student.age,
       batchLabel(student.batch),
+      categoryLabel(student.category ?? 'open'),
       student.paymentDate,
       student.numberOfClasses,
       student.feesPerClass,

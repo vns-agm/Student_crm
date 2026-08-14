@@ -7,8 +7,10 @@ import { Overview } from './components/Overview'
 import { Sidebar } from './components/Sidebar'
 import { StudentsView } from './components/StudentsView'
 import { ToastProvider } from './components/ToastProvider'
+import { TournamentView } from './components/TournamentView'
 import { useAuth } from './hooks/useAuth'
 import { useStudents } from './hooks/useStudents'
+import { useTournaments } from './hooks/useTournaments'
 import type { View } from './types'
 import './App.css'
 
@@ -34,6 +36,17 @@ function AuthenticatedApp({
     addPayment,
     deletePayment,
   } = useStudents()
+  const {
+    tournaments,
+    loading: tournamentsLoading,
+    error: tournamentsError,
+    createTournament,
+    deleteTournament,
+    addPlayer,
+    removePlayer,
+    pairRound,
+    setResult,
+  } = useTournaments()
 
   useEffect(() => {
     if (!isAdmin && view !== 'overview') {
@@ -137,6 +150,21 @@ function AuthenticatedApp({
             students={students}
             onAddPayment={addPayment}
             onDeletePayment={deletePayment}
+          />
+        ) : null}
+
+        {!loading && !error && isAdmin && view === 'tournament' ? (
+          <TournamentView
+            students={students}
+            tournaments={tournaments}
+            loading={tournamentsLoading}
+            error={tournamentsError}
+            onCreate={createTournament}
+            onDelete={deleteTournament}
+            onAddPlayer={addPlayer}
+            onRemovePlayer={removePlayer}
+            onPair={pairRound}
+            onSetResult={setResult}
           />
         ) : null}
       </main>

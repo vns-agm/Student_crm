@@ -7,10 +7,12 @@ import {
   requireAuth,
 } from './auth.js'
 import { db, ensureDb } from './db.js'
+import { computeStandings, makeSwissPairings } from './swiss.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
 const BATCHES = new Set(['beginner', 'intermediate', 'advanced'])
+const CATEGORIES = new Set(['u10', 'u15', 'open'])
 
 app.use(cors())
 app.use(express.json())
@@ -62,6 +64,7 @@ async function mapStudent(row) {
     numberOfClasses: row.number_of_classes,
     feesPerClass: row.fees_per_class,
     batch: row.batch,
+    category: row.category || 'open',
     totalFees: row.total_fees,
     amountPaid: row.amount_paid ?? 0,
     createdAt: row.created_at,
@@ -78,6 +81,7 @@ function parseStudentBody(body) {
   const feesPerClass = Number(body?.feesPerClass)
   const amountPaid = Number(body?.amountPaid)
   const batch = String(body?.batch ?? '').trim()
+  const category = String(body?.category ?? '').trim()
 
   if (!name) {
     return { error: 'Name is required.' }
@@ -100,6 +104,9 @@ function parseStudentBody(body) {
   if (!BATCHES.has(batch)) {
     return { error: 'Batch must be beginner, intermediate, or advanced.' }
   }
+  if (!CATEGORIES.has(category)) {
+    return { error: 'Category must be U-10, U-15, or Open.' }
+  }
 
   const totalFees = numberOfClasses * feesPerClass
   if (amountPaid > totalFees) {
@@ -114,6 +121,7 @@ function parseStudentBody(body) {
     feesPerClass,
     amountPaid,
     batch,
+    category,
     totalFees,
   }
 }
@@ -187,8 +195,8 @@ app.post('/api/students', requireAuth, requireAdmin, async (req, res, next) => {
     await db.execute({
       sql: `INSERT INTO students (
               id, name, age, payment_date, number_of_classes,
-              fees_per_class, batch, total_fees, amount_paid, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              fees_per_class, batch, total_fees, amount_paid, category, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         id,
         parsed.name,
@@ -199,6 +207,7 @@ app.post('/api/students', requireAuth, requireAdmin, async (req, res, next) => {
         parsed.batch,
         parsed.totalFees,
         parsed.amountPaid,
+        parsed.category,
         createdAt,
       ],
     })
@@ -225,7 +234,8 @@ app.put('/api/students/:id', requireAuth, requireAdmin, async (req, res, next) =
     await db.execute({
       sql: `UPDATE students
              SET name = ?, age = ?, payment_date = ?, number_of_classes = ?,
-                 fees_per_class = ?, batch = ?, total_fees = ?, amount_paid = ?
+                 fees_per_class = ?, batch = ?, total_fees = ?, amount_paid = ?,
+                 category = ?
              WHERE id = ?`,
       args: [
         parsed.name,
@@ -236,6 +246,7 @@ app.put('/api/students/:id', requireAuth, requireAdmin, async (req, res, next) =
         parsed.batch,
         parsed.totalFees,
         parsed.amountPaid,
+        parsed.category,
         req.params.id,
       ],
     })
@@ -415,6 +426,336 @@ app.delete('/api/payments/:id', requireAuth, requireAdmin, async (req, res, next
 
     const row = await getStudentRow(payment.rows[0].student_id)
     res.json(await mapStudent(row))
+  } catch (error) {
+    next(error)
+  }
+})
+
+function playerNameMap(players) {
+  return new Map(players.map((p) => [p.id, p.name]))
+}
+
+async function loadTournament(id) {
+  const tournamentResult = await db.execute({
+    sql: 'SELECT * FROM tournaments WHERE id = ?',
+    args: [id],
+  })
+  const row = tournamentResult.rows[0]
+  if (!row) return null
+
+  const playersResult = await db.execute({
+    sql: `SELECT id, tournament_id, student_id, name, category
+          FROM tournament_players
+          WHERE tournament_id = ?
+          ORDER BY name`,
+    args: [id],
+  })
+  const players = playersResult.rows.map((p) => ({
+    id: p.id,
+    tournamentId: p.tournament_id,
+    studentId: p.student_id,
+    name: p.name,
+    category: p.category || 'open',
+  }))
+  const names = playerNameMap(players)
+
+  const pairingsResult = await db.execute({
+    sql: `SELECT id, tournament_id, round, board, white_id, black_id, result
+          FROM tournament_pairings
+          WHERE tournament_id = ?
+          ORDER BY round, board`,
+    args: [id],
+  })
+  const pairings = pairingsResult.rows.map((p) => ({
+    id: p.id,
+    tournamentId: p.tournament_id,
+    round: p.round,
+    board: p.board,
+    whiteId: p.white_id,
+    blackId: p.black_id,
+    whiteName: names.get(p.white_id) ?? 'Unknown',
+    blackName: p.black_id ? (names.get(p.black_id) ?? 'Unknown') : null,
+    result: p.result,
+  }))
+
+  const categoryById = new Map(players.map((p) => [p.id, p.category]))
+  const standings = computeStandings(
+    players.map((p) => ({ id: p.id, name: p.name })),
+    pairings,
+  ).map((s) => ({
+    id: s.id,
+    name: s.name,
+    category: categoryById.get(s.id) || 'open',
+    points: s.points,
+    wins: s.wins,
+    draws: s.draws,
+    losses: s.losses,
+    buchholz: s.buchholz,
+    hadBye: s.hadBye,
+  }))
+
+  const categoryWinners = {
+    u10: standings.filter((s) => s.category === 'u10').slice(0, 3),
+    u15: standings.filter((s) => s.category === 'u15').slice(0, 3),
+    open: standings.filter((s) => s.category === 'open').slice(0, 3),
+  }
+
+  return {
+    id: row.id,
+    name: row.name,
+    category: row.category,
+    rounds: row.rounds,
+    currentRound: row.current_round,
+    status: row.status,
+    createdAt: row.created_at,
+    players,
+    pairings,
+    standings,
+    categoryWinners,
+  }
+}
+
+app.get('/api/tournaments', requireAuth, requireAdmin, async (_req, res, next) => {
+  try {
+    const result = await db.execute(
+      'SELECT * FROM tournaments ORDER BY created_at DESC',
+    )
+    const tournaments = await Promise.all(
+      result.rows.map((row) => loadTournament(row.id)),
+    )
+    res.json(tournaments)
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/tournaments', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const name = String(req.body?.name ?? '').trim()
+    if (!name) {
+      return res.status(400).json({ error: 'Tournament name is required.' })
+    }
+
+    const id = crypto.randomUUID()
+    await db.execute({
+      sql: `INSERT INTO tournaments (id, name, category, rounds, current_round, status, created_at)
+            VALUES (?, ?, 'open', 0, 0, 'setup', ?)`,
+      args: [id, name, new Date().toISOString()],
+    })
+    res.status(201).json(await loadTournament(id))
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.delete('/api/tournaments/:id', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const result = await db.execute({
+      sql: 'DELETE FROM tournaments WHERE id = ?',
+      args: [req.params.id],
+    })
+    if ((result.rowsAffected ?? 0) === 0) {
+      return res.status(404).json({ error: 'Tournament not found.' })
+    }
+    res.status(204).end()
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/tournaments/:id/players', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const tournament = await loadTournament(req.params.id)
+    if (!tournament) {
+      return res.status(404).json({ error: 'Tournament not found.' })
+    }
+    if (tournament.status !== 'setup') {
+      return res.status(400).json({ error: 'Players can only be added before pairings start.' })
+    }
+
+    const studentId = req.body?.studentId ? String(req.body.studentId) : null
+    let name = String(req.body?.name ?? '').trim()
+    let category = String(req.body?.category ?? '').trim()
+
+    if (studentId) {
+      const student = await getStudentRow(studentId)
+      if (!student) {
+        return res.status(404).json({ error: 'Student not found.' })
+      }
+      name = student.name
+      if (!category) category = student.category || 'open'
+      const already = tournament.players.some((p) => p.studentId === studentId)
+      if (already) {
+        return res.status(400).json({ error: 'This student is already in the tournament.' })
+      }
+    }
+
+    if (!name) {
+      return res.status(400).json({ error: 'Player name is required.' })
+    }
+    if (!CATEGORIES.has(category)) {
+      return res.status(400).json({ error: 'Select a category: U-10, U-15, or Open.' })
+    }
+
+    await db.execute({
+      sql: `INSERT INTO tournament_players (id, tournament_id, student_id, name, category)
+            VALUES (?, ?, ?, ?, ?)`,
+      args: [crypto.randomUUID(), req.params.id, studentId, name, category],
+    })
+    res.status(201).json(await loadTournament(req.params.id))
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.delete('/api/tournaments/:id/players/:playerId', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const tournament = await loadTournament(req.params.id)
+    if (!tournament) {
+      return res.status(404).json({ error: 'Tournament not found.' })
+    }
+    if (tournament.status !== 'setup') {
+      return res.status(400).json({ error: 'Players can only be removed before pairings start.' })
+    }
+
+    await db.execute({
+      sql: 'DELETE FROM tournament_players WHERE id = ? AND tournament_id = ?',
+      args: [req.params.playerId, req.params.id],
+    })
+    res.json(await loadTournament(req.params.id))
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/tournaments/:id/pair', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const tournament = await loadTournament(req.params.id)
+    if (!tournament) {
+      return res.status(404).json({ error: 'Tournament not found.' })
+    }
+    if (tournament.players.length < 2) {
+      return res.status(400).json({ error: 'Add at least 2 players before pairing.' })
+    }
+
+    const requestedRounds = Number(req.body?.rounds)
+    if (tournament.status === 'setup') {
+      if (!Number.isInteger(requestedRounds) || requestedRounds < 1 || requestedRounds > 15) {
+        return res.status(400).json({ error: 'Enter a valid number of rounds (1–15).' })
+      }
+    }
+
+    if (tournament.status === 'completed') {
+      return res.status(400).json({ error: 'This tournament is already completed.' })
+    }
+
+    if (tournament.currentRound > 0) {
+      const currentGames = tournament.pairings.filter(
+        (p) => p.round === tournament.currentRound,
+      )
+      const unfinished = currentGames.some((p) => !p.result)
+      if (unfinished) {
+        return res.status(400).json({ error: 'Enter all results for the current round first.' })
+      }
+    }
+
+    const nextRound = tournament.currentRound + 1
+    const totalRounds =
+      tournament.status === 'setup' ? requestedRounds : tournament.rounds
+
+    if (nextRound > totalRounds) {
+      return res.status(400).json({ error: 'All rounds have already been paired.' })
+    }
+
+    const standings = computeStandings(
+      tournament.players.map((p) => ({ id: p.id, name: p.name })),
+      tournament.pairings,
+    )
+
+    const boards = makeSwissPairings(
+      standings,
+      tournament.pairings,
+      nextRound,
+    )
+
+    for (const board of boards) {
+      await db.execute({
+        sql: `INSERT INTO tournament_pairings
+              (id, tournament_id, round, board, white_id, black_id, result)
+              VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          crypto.randomUUID(),
+          req.params.id,
+          nextRound,
+          board.board,
+          board.whiteId,
+          board.blackId,
+          board.result,
+        ],
+      })
+    }
+
+    const finished = nextRound >= totalRounds
+    await db.execute({
+      sql: `UPDATE tournaments
+            SET rounds = ?, current_round = ?, status = ?
+            WHERE id = ?`,
+      args: [
+        totalRounds,
+        nextRound,
+        finished && boards.every((b) => b.result) ? 'completed' : 'in_progress',
+        req.params.id,
+      ],
+    })
+
+    res.json(await loadTournament(req.params.id))
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.put('/api/tournaments/:id/pairings/:pairingId', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const tournament = await loadTournament(req.params.id)
+    if (!tournament) {
+      return res.status(404).json({ error: 'Tournament not found.' })
+    }
+
+    const pairing = tournament.pairings.find((p) => p.id === req.params.pairingId)
+    if (!pairing) {
+      return res.status(404).json({ error: 'Pairing not found.' })
+    }
+    if (pairing.result === 'bye') {
+      return res.status(400).json({ error: 'Bye results cannot be changed.' })
+    }
+
+    const result = String(req.body?.result ?? '')
+    if (!['1-0', '0-1', '1/2-1/2'].includes(result)) {
+      return res.status(400).json({ error: 'Result must be 1-0, 0-1, or 1/2-1/2.' })
+    }
+
+    await db.execute({
+      sql: 'UPDATE tournament_pairings SET result = ? WHERE id = ?',
+      args: [result, req.params.pairingId],
+    })
+
+    const updated = await loadTournament(req.params.id)
+    const lastRoundDone =
+      updated.currentRound >= updated.rounds &&
+      updated.pairings
+        .filter((p) => p.round === updated.currentRound)
+        .every((p) => p.result)
+
+    if (lastRoundDone && updated.status !== 'completed') {
+      await db.execute({
+        sql: `UPDATE tournaments SET status = 'completed' WHERE id = ?`,
+        args: [req.params.id],
+      })
+      res.json(await loadTournament(req.params.id))
+      return
+    }
+
+    res.json(updated)
   } catch (error) {
     next(error)
   }

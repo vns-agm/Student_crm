@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
-import { BATCH_OPTIONS } from '../types'
-import type { Batch, StudentDetailsInput } from '../types'
+import { BATCH_OPTIONS, CATEGORY_OPTIONS } from '../types'
+import type { Batch, Category, StudentDetailsInput } from '../types'
 
 interface AddStudentViewProps {
   onAdd: (details: StudentDetailsInput) => Promise<unknown>
@@ -16,6 +16,7 @@ const emptyForm = {
   feesPerClass: '',
   amountPaid: '',
   batch: '' as '' | Batch,
+  category: '' as '' | Category,
 }
 
 export function AddStudentView({ onAdd, onGoStudents }: AddStudentViewProps) {
@@ -75,6 +76,10 @@ export function AddStudentView({ onAdd, onGoStudents }: AddStudentViewProps) {
       setError('Select a batch.')
       return
     }
+    if (!form.category) {
+      setError('Select a category.')
+      return
+    }
 
     try {
       setSaving(true)
@@ -86,6 +91,7 @@ export function AddStudentView({ onAdd, onGoStudents }: AddStudentViewProps) {
         feesPerClass,
         amountPaid,
         batch: form.batch,
+        category: form.category,
       })
       setForm(emptyForm)
       setSuccess(`${name} was saved to the database.`)
@@ -102,7 +108,7 @@ export function AddStudentView({ onAdd, onGoStudents }: AddStudentViewProps) {
         <div>
           <h1>Add student details</h1>
           <p className="muted">
-            Enter name, age, payment date, classes, fees, amount paid, and batch.
+            Enter name, age, category, payment date, classes, fees, amount paid, and batch.
           </p>
         </div>
         <button type="button" className="btn ghost" onClick={onGoStudents}>
@@ -206,6 +212,25 @@ export function AddStudentView({ onAdd, onGoStudents }: AddStudentViewProps) {
             </select>
           </label>
         </div>
+        <label>
+          Category
+          <select
+            value={form.category}
+            onChange={(e) =>
+              setForm({ ...form, category: e.target.value as '' | Category })
+            }
+            required
+          >
+            <option value="" disabled>
+              Select category
+            </option>
+            {CATEGORY_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
         {computedTotal !== null ? (
           <p className="muted compact">
             Total fees: ₹{computedTotal.toLocaleString('en-IN')}
