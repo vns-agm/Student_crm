@@ -1,5 +1,10 @@
 import { useState } from 'react'
-import { attendanceRate, balanceDue, totalPaid } from '../hooks/useStudents'
+import {
+  attendanceRate,
+  balanceDue,
+  classesHeld,
+  totalPaid,
+} from '../hooks/useStudents'
 import { BATCH_OPTIONS } from '../types'
 import type { Batch, Student } from '../types'
 import { exportStudentsToCsv } from '../utils/exportCsv'
@@ -123,6 +128,7 @@ export function Overview({
               <th>Name</th>
               <th>Age</th>
               <th>Batch</th>
+              <th>Classes held</th>
               <th>Attendance</th>
               <th>Paid</th>
               <th>Balance</th>
@@ -132,7 +138,7 @@ export function Overview({
           <tbody>
             {students.length === 0 ? (
               <tr>
-                <td colSpan={7} className="empty-cell">
+                <td colSpan={8} className="empty-cell">
                   No student records to show yet.
                 </td>
               </tr>
@@ -144,6 +150,7 @@ export function Overview({
                   <td>
                     <span className="pill">{batchLabel(s.batch)}</span>
                   </td>
+                  <td>{classesHeld(s)}</td>
                   <td>
                     <span className="pill">{attendanceRate(s)}%</span>
                   </td>

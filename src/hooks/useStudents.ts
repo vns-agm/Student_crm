@@ -133,10 +133,13 @@ export function balanceDue(student: Student): number {
   return Math.max(0, student.totalFees - totalPaid(student))
 }
 
-export function attendanceRate(student: Student): number {
-  if (student.attendance.length === 0) return 0
-  const present = student.attendance.filter(
+export function classesHeld(student: Student): number {
+  return student.attendance.filter(
     (a) => a.status === 'present' || a.status === 'late',
   ).length
-  return Math.round((present / student.attendance.length) * 100)
+}
+
+export function attendanceRate(student: Student): number {
+  if (student.attendance.length === 0) return 0
+  return Math.round((classesHeld(student) / student.attendance.length) * 100)
 }
