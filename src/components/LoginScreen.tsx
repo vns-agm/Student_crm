@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import type { AuthUser } from '../types'
+import { ChessLoginScene } from './ChessLoginScene'
 
 interface LoginScreenProps {
   onLogin: (username: string, password: string) => Promise<AuthUser>
@@ -27,12 +28,19 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
 
   return (
     <div className="login-screen">
+      <div className="login-hero">
+        <ChessLoginScene />
+        <div className="login-hero-copy">
+          <h1 className="login-hero-title">Agm-Chess Classes</h1>
+        </div>
+      </div>
+
       <form className="login-card" onSubmit={handleSubmit}>
         <div className="login-brand">
           <span className="brand-mark" aria-hidden="true" />
           <div>
-            <h1>Agm-Chess Classes</h1>
-            <p className="muted">Login to continue</p>
+            <h2>Welcome back</h2>
+            <p className="muted">Sign in to continue</p>
           </div>
         </div>
 

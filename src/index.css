@@ -1,31 +1,35 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
 
 :root {
-  --bg: #e8eef5;
-  --surface: #f5f8fc;
-  --surface-strong: #ffffff;
-  --ink: #152033;
-  --muted: #5b6b82;
-  --line: #d0dae8;
-  --brand: #1d4f91;
-  --brand-soft: #dce8f8;
-  --accent: #0f766e;
-  --ok: #0f766e;
+  --bg: #dfe8e2;
+  --surface: #eef3ef;
+  --surface-strong: #f7faf7;
+  --ink: #14241c;
+  --muted: #4d6458;
+  --line: #c5d4cb;
+  --brand: #1a4d3e;
+  --brand-mid: #246b56;
+  --brand-soft: #d4e8df;
+  --accent: #b8892c;
+  --accent-soft: #f3e6c4;
+  --ok: #1f7a4c;
   --warn: #a16207;
   --danger: #b42318;
-  --present: #0f766e;
+  --present: #1f7a4c;
   --late: #a16207;
   --absent: #b42318;
-  --shadow: 0 16px 36px rgba(21, 32, 51, 0.08);
+  --shadow: 0 12px 28px rgba(20, 36, 28, 0.1);
   --radius: 16px;
-  font-family: 'Source Sans 3', sans-serif;
+  --board-dark: #1a4d3e;
+  --board-light: #d8e6da;
+  font-family: 'Plus Jakarta Sans', sans-serif;
   line-height: 1.5;
   font-weight: 500;
   color: var(--ink);
   background:
-    radial-gradient(circle at 0% 0%, rgba(29, 79, 145, 0.14), transparent 34%),
-    radial-gradient(circle at 100% 0%, rgba(15, 118, 110, 0.1), transparent 30%),
-    linear-gradient(165deg, #f0f4f9 0%, var(--bg) 48%, #dde6f1 100%);
+    radial-gradient(ellipse 70% 50% at 8% 0%, rgba(184, 137, 44, 0.16), transparent 55%),
+    radial-gradient(ellipse 55% 45% at 100% 10%, rgba(26, 77, 62, 0.14), transparent 50%),
+    linear-gradient(165deg, #eaf1ec 0%, var(--bg) 45%, #d2ddd6 100%);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -56,8 +60,9 @@ select {
 h1,
 h2,
 .brand-name,
-.stat-value {
-  font-family: 'Outfit', sans-serif;
+.stat-value,
+.login-hero-title {
+  font-family: 'Fraunces', Georgia, serif;
   font-weight: 700;
   letter-spacing: -0.02em;
 }
@@ -70,4 +75,14 @@ h1 {
 h2 {
   margin: 0 0 1rem;
   font-size: 1.1rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
