@@ -17,6 +17,7 @@ export function createToken(user) {
     username: user.username,
     role: user.role,
     tenantId: user.tenant_id || user.tenantId,
+    isOwner: Boolean(user.is_owner ?? user.isOwner),
     exp: Date.now() + TOKEN_TTL_MS,
   }
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url')
@@ -70,6 +71,7 @@ export function requireAuth(req, res, next) {
     username: payload.username,
     role: payload.role,
     tenantId: payload.tenantId,
+    isOwner: Boolean(payload.isOwner),
   }
   next()
 }
@@ -77,6 +79,13 @@ export function requireAuth(req, res, next) {
 export function requireAdmin(req, res, next) {
   if (req.user?.role !== 'admin') {
     return res.status(403).json({ error: 'Admin access required.' })
+  }
+  next()
+}
+
+export function requireOwner(req, res, next) {
+  if (req.user?.role !== 'admin' || !req.user?.isOwner) {
+    return res.status(403).json({ error: 'Platform owner access required.' })
   }
   next()
 }

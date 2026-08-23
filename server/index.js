@@ -5,6 +5,7 @@ import {
   hashPassword,
   requireAdmin,
   requireAuth,
+  requireOwner,
 } from './auth.js'
 import { db, ensureDb, getTenantById } from './db.js'
 import { computeStandings, makeSwissPairings } from './swiss.js'
@@ -154,6 +155,7 @@ async function buildAuthUser(row) {
     username: row.username,
     role: row.role,
     tenantId: row.tenant_id,
+    isOwner: Boolean(row.is_owner),
     branding,
   }
 }
@@ -168,7 +170,7 @@ app.post('/api/login', async (req, res, next) => {
     }
 
     const result = await db.execute({
-      sql: 'SELECT id, username, password_hash, role, tenant_id FROM users WHERE username = ?',
+      sql: 'SELECT id, username, password_hash, role, tenant_id, is_owner FROM users WHERE username = ?',
       args: [username],
     })
     const user = result.rows[0]
@@ -192,7 +194,7 @@ app.post('/api/login', async (req, res, next) => {
 app.get('/api/me', requireAuth, async (req, res, next) => {
   try {
     const result = await db.execute({
-      sql: 'SELECT id, username, role, tenant_id FROM users WHERE id = ?',
+      sql: 'SELECT id, username, role, tenant_id, is_owner FROM users WHERE id = ?',
       args: [req.user.id],
     })
     const row = result.rows[0]
@@ -217,7 +219,7 @@ app.get('/api/branding', requireAuth, async (req, res, next) => {
   }
 })
 
-app.put('/api/branding', requireAuth, requireAdmin, async (req, res, next) => {
+app.put('/api/branding', requireAuth, requireOwner, async (req, res, next) => {
   try {
     const displayName = String(req.body?.displayName ?? '').trim()
     const logoUrl = String(req.body?.logoUrl ?? '').trim()
@@ -254,7 +256,7 @@ app.put('/api/branding', requireAuth, requireAdmin, async (req, res, next) => {
   }
 })
 
-app.get('/api/tenant/users', requireAuth, requireAdmin, async (req, res, next) => {
+app.get('/api/tenant/users', requireAuth, requireOwner, async (req, res, next) => {
   try {
     const result = await db.execute({
       sql: `SELECT id, username, role, created_at
@@ -276,7 +278,7 @@ app.get('/api/tenant/users', requireAuth, requireAdmin, async (req, res, next) =
   }
 })
 
-app.post('/api/tenant/parents', requireAuth, requireAdmin, async (req, res, next) => {
+app.post('/api/tenant/parents', requireAuth, requireOwner, async (req, res, next) => {
   try {
     const username = String(req.body?.username ?? '').trim()
     const password = String(req.body?.password ?? '')
@@ -298,8 +300,8 @@ app.post('/api/tenant/parents', requireAuth, requireAdmin, async (req, res, next
 
     const id = crypto.randomUUID()
     await db.execute({
-      sql: `INSERT INTO users (id, username, password_hash, role, tenant_id, created_at)
-            VALUES (?, ?, ?, 'parent', ?, ?)`,
+      sql: `INSERT INTO users (id, username, password_hash, role, tenant_id, is_owner, created_at)
+            VALUES (?, ?, ?, 'parent', ?, 0, ?)`,
       args: [id, username, hashPassword(password), req.user.tenantId, new Date().toISOString()],
     })
 
@@ -314,7 +316,7 @@ app.post('/api/tenant/parents', requireAuth, requireAdmin, async (req, res, next
   }
 })
 
-app.post('/api/tenant/coaches', requireAuth, requireAdmin, async (req, res, next) => {
+app.post('/api/tenant/coaches', requireAuth, requireOwner, async (req, res, next) => {
   try {
     const academyName = String(req.body?.academyName ?? '').trim()
     const adminUsername = String(req.body?.adminUsername ?? '').trim()
@@ -388,8 +390,8 @@ app.post('/api/tenant/coaches', requireAuth, requireAdmin, async (req, res, next
         ],
       },
       {
-        sql: `INSERT INTO users (id, username, password_hash, role, tenant_id, created_at)
-              VALUES (?, ?, ?, 'admin', ?, ?)`,
+        sql: `INSERT INTO users (id, username, password_hash, role, tenant_id, is_owner, created_at)
+              VALUES (?, ?, ?, 'admin', ?, 0, ?)`,
         args: [adminId, adminUsername, hashPassword(adminPassword), tenantId, createdAt],
       },
     ]
@@ -398,8 +400,8 @@ app.post('/api/tenant/coaches', requireAuth, requireAdmin, async (req, res, next
     if (parentUsername) {
       parentId = crypto.randomUUID()
       statements.push({
-        sql: `INSERT INTO users (id, username, password_hash, role, tenant_id, created_at)
-              VALUES (?, ?, ?, 'parent', ?, ?)`,
+        sql: `INSERT INTO users (id, username, password_hash, role, tenant_id, is_owner, created_at)
+              VALUES (?, ?, ?, 'parent', ?, 0, ?)`,
         args: [parentId, parentUsername, hashPassword(parentPassword), tenantId, createdAt],
       })
     }
@@ -418,7 +420,7 @@ app.post('/api/tenant/coaches', requireAuth, requireAdmin, async (req, res, next
   }
 })
 
-app.delete('/api/tenant/users/:id', requireAuth, requireAdmin, async (req, res, next) => {
+app.delete('/api/tenant/users/:id', requireAuth, requireOwner, async (req, res, next) => {
   try {
     if (req.params.id === req.user.id) {
       return res.status(400).json({ error: 'You cannot delete your own account.' })

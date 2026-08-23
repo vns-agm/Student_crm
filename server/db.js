@@ -166,6 +166,7 @@ export function ensureDb() {
       await ensureColumn('students', 'category', "TEXT NOT NULL DEFAULT 'open'")
       await ensureColumn('students', 'tenant_id', 'TEXT')
       await ensureColumn('users', 'tenant_id', 'TEXT')
+      await ensureColumn('users', 'is_owner', 'INTEGER NOT NULL DEFAULT 0')
       await ensureColumn('tournaments', 'tenant_id', 'TEXT')
       await ensureColumn('tournament_players', 'category', "TEXT NOT NULL DEFAULT 'open'")
 
@@ -205,10 +206,18 @@ export function ensureDb() {
         args: [DEFAULT_TENANT_ID],
       })
 
+      // Platform owner: original admin on the default tenant only
+      await db.execute({
+        sql: `UPDATE users
+              SET is_owner = 1
+              WHERE username = 'admin' AND tenant_id = ? AND role = 'admin'`,
+        args: [DEFAULT_TENANT_ID],
+      })
+
       const { hashPassword } = await import('./auth.js')
       const defaults = [
-        { username: 'admin', password: 'admin123', role: 'admin' },
-        { username: 'parent', password: 'parent123', role: 'parent' },
+        { username: 'admin', password: 'masteradmin123', role: 'admin', isOwner: 1 },
+        { username: 'parent', password: 'parent123', role: 'parent', isOwner: 0 },
       ]
 
       for (const account of defaults) {
@@ -218,16 +227,22 @@ export function ensureDb() {
         })
         if (!existing.rows[0]) {
           await db.execute({
-            sql: `INSERT INTO users (id, username, password_hash, role, tenant_id, created_at)
-                  VALUES (?, ?, ?, ?, ?, ?)`,
+            sql: `INSERT INTO users (id, username, password_hash, role, tenant_id, is_owner, created_at)
+                  VALUES (?, ?, ?, ?, ?, ?, ?)`,
             args: [
               crypto.randomUUID(),
               account.username,
               hashPassword(account.password),
               account.role,
               DEFAULT_TENANT_ID,
+              account.isOwner,
               new Date().toISOString(),
             ],
+          })
+        } else if (account.username === 'admin') {
+          await db.execute({
+            sql: `UPDATE users SET password_hash = ?, is_owner = 1 WHERE username = 'admin' AND tenant_id = ?`,
+            args: [hashPassword(account.password), DEFAULT_TENANT_ID],
           })
         }
       }

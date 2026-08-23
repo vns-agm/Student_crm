@@ -25,6 +25,7 @@ function AuthenticatedApp({
 }) {
   const [view, setView] = useState<View>('overview')
   const isAdmin = user.role === 'admin'
+  const isOwner = Boolean(user.isOwner)
   const {
     students,
     loading,
@@ -49,13 +50,16 @@ function AuthenticatedApp({
     pairRound,
     setResult,
   } = useTournaments()
-  const whiteLabel = useWhiteLabel(isAdmin)
+  const whiteLabel = useWhiteLabel(isOwner)
 
   useEffect(() => {
     if (!isAdmin && view !== 'overview' && view !== 'tournament') {
       setView('overview')
     }
-  }, [isAdmin, view])
+    if (isAdmin && !isOwner && view === 'settings') {
+      setView('overview')
+    }
+  }, [isAdmin, isOwner, view])
 
   const branding = whiteLabel.branding ?? user.branding
 
@@ -176,7 +180,7 @@ function AuthenticatedApp({
           />
         ) : null}
 
-        {!loading && !error && isAdmin && view === 'settings' ? (
+        {!loading && !error && isOwner && view === 'settings' ? (
           <WhiteLabelSettings
             branding={whiteLabel.branding}
             users={whiteLabel.users}

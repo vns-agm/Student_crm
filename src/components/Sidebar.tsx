@@ -9,14 +9,26 @@ interface SidebarProps {
   onLogout: () => void
 }
 
-const allLinks: { id: View; label: string; hint: string; roles: UserRole[] }[] = [
+const allLinks: {
+  id: View
+  label: string
+  hint: string
+  roles: UserRole[]
+  ownerOnly?: boolean
+}[] = [
   { id: 'overview', label: 'Overview', hint: 'Snapshot', roles: ['admin', 'parent'] },
   { id: 'add-student', label: 'Add student', hint: 'New details', roles: ['admin'] },
   { id: 'students', label: 'Students', hint: 'All records', roles: ['admin'] },
   { id: 'attendance', label: 'Attendance', hint: 'Daily roll', roles: ['admin'] },
   { id: 'fees', label: 'Fees', hint: 'Payments', roles: ['admin'] },
   { id: 'tournament', label: 'Tournament', hint: 'Swiss pairing', roles: ['admin', 'parent'] },
-  { id: 'settings', label: 'White-label', hint: 'Brand & coaches', roles: ['admin'] },
+  {
+    id: 'settings',
+    label: 'White-label',
+    hint: 'Brand & coaches',
+    roles: ['admin'],
+    ownerOnly: true,
+  },
 ]
 
 export function Sidebar({
@@ -27,7 +39,11 @@ export function Sidebar({
   branding,
   onLogout,
 }: SidebarProps) {
-  const links = allLinks.filter((link) => link.roles.includes(user.role))
+  const links = allLinks.filter((link) => {
+    if (!link.roles.includes(user.role)) return false
+    if (link.ownerOnly && !user.isOwner) return false
+    return true
+  })
   const displayName = branding?.displayName || 'Agm-Chess Classes'
   const logoUrl = branding?.logoUrl || ''
 

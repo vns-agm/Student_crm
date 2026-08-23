@@ -129,6 +129,7 @@ export interface AuthUser {
   username: string
   role: UserRole
   tenantId: string
+  isOwner?: boolean
   branding?: TenantBranding | null
 }
 
