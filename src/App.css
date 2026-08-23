@@ -40,6 +40,16 @@
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
   position: relative;
   overflow: hidden;
+  flex-shrink: 0;
+}
+
+.brand-logo {
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 0.75rem;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
 }
 
 .brand-mark::after {

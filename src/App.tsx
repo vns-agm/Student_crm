@@ -8,17 +8,19 @@ import { Sidebar } from './components/Sidebar'
 import { StudentsView } from './components/StudentsView'
 import { ToastProvider } from './components/ToastProvider'
 import { TournamentView } from './components/TournamentView'
+import { WhiteLabelSettings } from './components/WhiteLabelSettings'
 import { useAuth } from './hooks/useAuth'
 import { useStudents } from './hooks/useStudents'
 import { useTournaments } from './hooks/useTournaments'
-import type { View } from './types'
+import { useWhiteLabel } from './hooks/useWhiteLabel'
+import type { AuthUser, View } from './types'
 import './App.css'
 
 function AuthenticatedApp({
   user,
   onLogout,
 }: {
-  user: { id: string; username: string; role: 'admin' | 'parent' }
+  user: AuthUser
   onLogout: () => void
 }) {
   const [view, setView] = useState<View>('overview')
@@ -47,12 +49,15 @@ function AuthenticatedApp({
     pairRound,
     setResult,
   } = useTournaments()
+  const whiteLabel = useWhiteLabel(isAdmin)
 
   useEffect(() => {
     if (!isAdmin && view !== 'overview' && view !== 'tournament') {
       setView('overview')
     }
   }, [isAdmin, view])
+
+  const branding = whiteLabel.branding ?? user.branding
 
   return (
     <div className="app-shell">
@@ -61,12 +66,14 @@ function AuthenticatedApp({
         onChange={setView}
         studentCount={students.length}
         user={user}
+        branding={branding}
         onLogout={onLogout}
       />
       <main className="main">
         <div className="top-auth-bar">
           <p className="muted compact">
             {user.username} · {user.role}
+            {branding?.displayName ? ` · ${branding.displayName}` : ''}
           </p>
           <div className="auth-actions">
             <button type="button" className="btn small ghost" onClick={onLogout}>
@@ -166,6 +173,19 @@ function AuthenticatedApp({
             onRemovePlayer={removePlayer}
             onPair={pairRound}
             onSetResult={setResult}
+          />
+        ) : null}
+
+        {!loading && !error && isAdmin && view === 'settings' ? (
+          <WhiteLabelSettings
+            branding={whiteLabel.branding}
+            users={whiteLabel.users}
+            loading={whiteLabel.loading}
+            error={whiteLabel.error}
+            onUpdateBranding={whiteLabel.updateBranding}
+            onCreateParent={whiteLabel.createParent}
+            onCreateCoach={whiteLabel.createCoach}
+            onDeleteParent={whiteLabel.deleteParent}
           />
         ) : null}
       </main>

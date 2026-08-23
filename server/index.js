@@ -6,7 +6,7 @@ import {
   requireAdmin,
   requireAuth,
 } from './auth.js'
-import { db, ensureDb } from './db.js'
+import { db, ensureDb, getTenantById } from './db.js'
 import { computeStandings, makeSwissPairings } from './swiss.js'
 
 const app = express()
@@ -126,12 +126,36 @@ function parseStudentBody(body) {
   }
 }
 
-async function getStudentRow(id) {
+async function getStudentRow(id, tenantId) {
   const result = await db.execute({
-    sql: 'SELECT * FROM students WHERE id = ?',
-    args: [id],
+    sql: 'SELECT * FROM students WHERE id = ? AND tenant_id = ?',
+    args: [id, tenantId],
   })
   return result.rows[0] ?? null
+}
+
+function slugify(value) {
+  return String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 48)
+}
+
+function isHexColor(value) {
+  return /^#[0-9a-fA-F]{6}$/.test(value)
+}
+
+async function buildAuthUser(row) {
+  const branding = await getTenantById(row.tenant_id)
+  return {
+    id: row.id,
+    username: row.username,
+    role: row.role,
+    tenantId: row.tenant_id,
+    branding,
+  }
 }
 
 app.post('/api/login', async (req, res, next) => {
@@ -144,37 +168,282 @@ app.post('/api/login', async (req, res, next) => {
     }
 
     const result = await db.execute({
-      sql: 'SELECT id, username, password_hash, role FROM users WHERE username = ?',
+      sql: 'SELECT id, username, password_hash, role, tenant_id FROM users WHERE username = ?',
       args: [username],
     })
     const user = result.rows[0]
     if (!user || user.password_hash !== hashPassword(password)) {
       return res.status(401).json({ error: 'Invalid username or password.' })
     }
+    if (!user.tenant_id) {
+      return res.status(401).json({ error: 'Account is not linked to a CRM.' })
+    }
 
     const token = createToken(user)
     res.json({
       token,
-      user: {
-        id: user.id,
-        username: user.username,
-        role: user.role,
-      },
+      user: await buildAuthUser(user),
     })
   } catch (error) {
     next(error)
   }
 })
 
-app.get('/api/me', requireAuth, (req, res) => {
-  res.json({ user: req.user })
+app.get('/api/me', requireAuth, async (req, res, next) => {
+  try {
+    const result = await db.execute({
+      sql: 'SELECT id, username, role, tenant_id FROM users WHERE id = ?',
+      args: [req.user.id],
+    })
+    const row = result.rows[0]
+    if (!row) {
+      return res.status(401).json({ error: 'Please log in to continue.' })
+    }
+    res.json({ user: await buildAuthUser(row) })
+  } catch (error) {
+    next(error)
+  }
 })
 
-app.get('/api/students', requireAuth, async (_req, res, next) => {
+app.get('/api/branding', requireAuth, async (req, res, next) => {
   try {
-    const result = await db.execute(
-      'SELECT * FROM students ORDER BY created_at DESC',
+    const branding = await getTenantById(req.user.tenantId)
+    if (!branding) {
+      return res.status(404).json({ error: 'Branding not found.' })
+    }
+    res.json(branding)
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.put('/api/branding', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const displayName = String(req.body?.displayName ?? '').trim()
+    const logoUrl = String(req.body?.logoUrl ?? '').trim()
+    const primaryColor = String(req.body?.primaryColor ?? '').trim()
+    const accentColor = String(req.body?.accentColor ?? '').trim()
+
+    if (!displayName) {
+      return res.status(400).json({ error: 'Display name is required.' })
+    }
+    if (!isHexColor(primaryColor) || !isHexColor(accentColor)) {
+      return res.status(400).json({ error: 'Colors must be hex values like #1a4d3e.' })
+    }
+    if (logoUrl && !/^https?:\/\//i.test(logoUrl)) {
+      return res.status(400).json({ error: 'Logo URL must start with http:// or https://.' })
+    }
+
+    await db.execute({
+      sql: `UPDATE tenants
+             SET display_name = ?, name = ?, logo_url = ?, primary_color = ?, accent_color = ?
+             WHERE id = ?`,
+      args: [
+        displayName,
+        displayName,
+        logoUrl,
+        primaryColor,
+        accentColor,
+        req.user.tenantId,
+      ],
+    })
+
+    res.json(await getTenantById(req.user.tenantId))
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/tenant/users', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const result = await db.execute({
+      sql: `SELECT id, username, role, created_at
+            FROM users
+            WHERE tenant_id = ?
+            ORDER BY role, username`,
+      args: [req.user.tenantId],
+    })
+    res.json(
+      result.rows.map((row) => ({
+        id: row.id,
+        username: row.username,
+        role: row.role,
+        createdAt: row.created_at,
+      })),
     )
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/tenant/parents', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const username = String(req.body?.username ?? '').trim()
+    const password = String(req.body?.password ?? '')
+
+    if (!username || username.length < 3) {
+      return res.status(400).json({ error: 'Username must be at least 3 characters.' })
+    }
+    if (!password || password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters.' })
+    }
+
+    const existing = await db.execute({
+      sql: 'SELECT id FROM users WHERE username = ?',
+      args: [username],
+    })
+    if (existing.rows[0]) {
+      return res.status(400).json({ error: 'That username is already taken.' })
+    }
+
+    const id = crypto.randomUUID()
+    await db.execute({
+      sql: `INSERT INTO users (id, username, password_hash, role, tenant_id, created_at)
+            VALUES (?, ?, ?, 'parent', ?, ?)`,
+      args: [id, username, hashPassword(password), req.user.tenantId, new Date().toISOString()],
+    })
+
+    res.status(201).json({
+      id,
+      username,
+      role: 'parent',
+      createdAt: new Date().toISOString(),
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/tenant/coaches', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const academyName = String(req.body?.academyName ?? '').trim()
+    const adminUsername = String(req.body?.adminUsername ?? '').trim()
+    const adminPassword = String(req.body?.adminPassword ?? '')
+    const parentUsername = String(req.body?.parentUsername ?? '').trim()
+    const parentPassword = String(req.body?.parentPassword ?? '')
+    const primaryColor = String(req.body?.primaryColor ?? '#1a4d3e').trim()
+    const accentColor = String(req.body?.accentColor ?? '#b8892c').trim()
+
+    if (!academyName) {
+      return res.status(400).json({ error: 'Academy name is required.' })
+    }
+    if (!adminUsername || adminUsername.length < 3) {
+      return res.status(400).json({ error: 'Coach username must be at least 3 characters.' })
+    }
+    if (!adminPassword || adminPassword.length < 6) {
+      return res.status(400).json({ error: 'Coach password must be at least 6 characters.' })
+    }
+    if (!isHexColor(primaryColor) || !isHexColor(accentColor)) {
+      return res.status(400).json({ error: 'Colors must be hex values like #1a4d3e.' })
+    }
+
+    let slug = slugify(academyName) || `coach-${Date.now()}`
+    const slugTaken = await db.execute({
+      sql: 'SELECT id FROM tenants WHERE slug = ?',
+      args: [slug],
+    })
+    if (slugTaken.rows[0]) {
+      slug = `${slug}-${crypto.randomUUID().slice(0, 6)}`
+    }
+
+    const usernames = [adminUsername]
+    if (parentUsername) usernames.push(parentUsername)
+    for (const name of usernames) {
+      const taken = await db.execute({
+        sql: 'SELECT id FROM users WHERE username = ?',
+        args: [name],
+      })
+      if (taken.rows[0]) {
+        return res.status(400).json({ error: `Username "${name}" is already taken.` })
+      }
+    }
+
+    if (parentUsername) {
+      if (parentUsername.length < 3) {
+        return res.status(400).json({ error: 'Parent username must be at least 3 characters.' })
+      }
+      if (!parentPassword || parentPassword.length < 6) {
+        return res.status(400).json({ error: 'Parent password must be at least 6 characters.' })
+      }
+    }
+
+    const tenantId = crypto.randomUUID()
+    const createdAt = new Date().toISOString()
+    const adminId = crypto.randomUUID()
+
+    const statements = [
+      {
+        sql: `INSERT INTO tenants (
+                id, name, slug, display_name, logo_url,
+                primary_color, accent_color, created_at
+              ) VALUES (?, ?, ?, ?, '', ?, ?, ?)`,
+        args: [
+          tenantId,
+          academyName,
+          slug,
+          academyName,
+          primaryColor,
+          accentColor,
+          createdAt,
+        ],
+      },
+      {
+        sql: `INSERT INTO users (id, username, password_hash, role, tenant_id, created_at)
+              VALUES (?, ?, ?, 'admin', ?, ?)`,
+        args: [adminId, adminUsername, hashPassword(adminPassword), tenantId, createdAt],
+      },
+    ]
+
+    let parentId = null
+    if (parentUsername) {
+      parentId = crypto.randomUUID()
+      statements.push({
+        sql: `INSERT INTO users (id, username, password_hash, role, tenant_id, created_at)
+              VALUES (?, ?, ?, 'parent', ?, ?)`,
+        args: [parentId, parentUsername, hashPassword(parentPassword), tenantId, createdAt],
+      })
+    }
+
+    await db.batch(statements, 'write')
+
+    res.status(201).json({
+      tenant: await getTenantById(tenantId),
+      coach: { id: adminId, username: adminUsername, role: 'admin' },
+      parent: parentId
+        ? { id: parentId, username: parentUsername, role: 'parent' }
+        : null,
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.delete('/api/tenant/users/:id', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    if (req.params.id === req.user.id) {
+      return res.status(400).json({ error: 'You cannot delete your own account.' })
+    }
+
+    const result = await db.execute({
+      sql: `DELETE FROM users
+            WHERE id = ? AND tenant_id = ? AND role = 'parent'`,
+      args: [req.params.id, req.user.tenantId],
+    })
+    if ((result.rowsAffected ?? 0) === 0) {
+      return res.status(404).json({ error: 'Parent account not found in your CRM.' })
+    }
+    res.status(204).end()
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/students', requireAuth, async (req, res, next) => {
+  try {
+    const result = await db.execute({
+      sql: 'SELECT * FROM students WHERE tenant_id = ? ORDER BY created_at DESC',
+      args: [req.user.tenantId],
+    })
     const students = await Promise.all(result.rows.map((row) => mapStudent(row)))
     res.json(students)
   } catch (error) {
@@ -195,8 +464,8 @@ app.post('/api/students', requireAuth, requireAdmin, async (req, res, next) => {
     await db.execute({
       sql: `INSERT INTO students (
               id, name, age, payment_date, number_of_classes,
-              fees_per_class, batch, total_fees, amount_paid, category, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              fees_per_class, batch, total_fees, amount_paid, category, tenant_id, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         id,
         parsed.name,
@@ -208,11 +477,12 @@ app.post('/api/students', requireAuth, requireAdmin, async (req, res, next) => {
         parsed.totalFees,
         parsed.amountPaid,
         parsed.category,
+        req.user.tenantId,
         createdAt,
       ],
     })
 
-    const row = await getStudentRow(id)
+    const row = await getStudentRow(id, req.user.tenantId)
     res.status(201).json(await mapStudent(row))
   } catch (error) {
     next(error)
@@ -221,7 +491,7 @@ app.post('/api/students', requireAuth, requireAdmin, async (req, res, next) => {
 
 app.put('/api/students/:id', requireAuth, requireAdmin, async (req, res, next) => {
   try {
-    const existing = await getStudentRow(req.params.id)
+    const existing = await getStudentRow(req.params.id, req.user.tenantId)
     if (!existing) {
       return res.status(404).json({ error: 'Student not found.' })
     }
@@ -236,7 +506,7 @@ app.put('/api/students/:id', requireAuth, requireAdmin, async (req, res, next) =
              SET name = ?, age = ?, payment_date = ?, number_of_classes = ?,
                  fees_per_class = ?, batch = ?, total_fees = ?, amount_paid = ?,
                  category = ?
-             WHERE id = ?`,
+             WHERE id = ? AND tenant_id = ?`,
       args: [
         parsed.name,
         parsed.age,
@@ -248,10 +518,11 @@ app.put('/api/students/:id', requireAuth, requireAdmin, async (req, res, next) =
         parsed.amountPaid,
         parsed.category,
         req.params.id,
+        req.user.tenantId,
       ],
     })
 
-    const row = await getStudentRow(req.params.id)
+    const row = await getStudentRow(req.params.id, req.user.tenantId)
     res.json(await mapStudent(row))
   } catch (error) {
     next(error)
@@ -261,8 +532,8 @@ app.put('/api/students/:id', requireAuth, requireAdmin, async (req, res, next) =
 app.delete('/api/students/:id', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const result = await db.execute({
-      sql: 'DELETE FROM students WHERE id = ?',
-      args: [req.params.id],
+      sql: 'DELETE FROM students WHERE id = ? AND tenant_id = ?',
+      args: [req.params.id, req.user.tenantId],
     })
 
     if ((result.rowsAffected ?? 0) === 0) {
@@ -277,7 +548,7 @@ app.delete('/api/students/:id', requireAuth, requireAdmin, async (req, res, next
 
 app.put('/api/students/:id/attendance', requireAuth, requireAdmin, async (req, res, next) => {
   try {
-    const student = await getStudentRow(req.params.id)
+    const student = await getStudentRow(req.params.id, req.user.tenantId)
     if (!student) {
       return res.status(404).json({ error: 'Student not found.' })
     }
@@ -319,7 +590,7 @@ app.put('/api/students/:id/attendance', requireAuth, requireAdmin, async (req, r
       })
     }
 
-    const row = await getStudentRow(req.params.id)
+    const row = await getStudentRow(req.params.id, req.user.tenantId)
     res.json(await mapStudent(row))
   } catch (error) {
     next(error)
@@ -340,7 +611,10 @@ app.put('/api/attendance/bulk', requireAuth, requireAdmin, async (req, res, next
         .json({ error: 'Status must be present, absent, or late.' })
     }
 
-    const students = await db.execute('SELECT id FROM students')
+    const students = await db.execute({
+      sql: 'SELECT id FROM students WHERE tenant_id = ?',
+      args: [req.user.tenantId],
+    })
     const statements = []
 
     for (const student of students.rows) {
@@ -367,9 +641,10 @@ app.put('/api/attendance/bulk', requireAuth, requireAdmin, async (req, res, next
       await db.batch(statements, 'write')
     }
 
-    const result = await db.execute(
-      'SELECT * FROM students ORDER BY created_at DESC',
-    )
+    const result = await db.execute({
+      sql: 'SELECT * FROM students WHERE tenant_id = ? ORDER BY created_at DESC',
+      args: [req.user.tenantId],
+    })
     const mapped = await Promise.all(result.rows.map((row) => mapStudent(row)))
     res.json(mapped)
   } catch (error) {
@@ -379,7 +654,7 @@ app.put('/api/attendance/bulk', requireAuth, requireAdmin, async (req, res, next
 
 app.post('/api/students/:id/payments', requireAuth, requireAdmin, async (req, res, next) => {
   try {
-    const student = await getStudentRow(req.params.id)
+    const student = await getStudentRow(req.params.id, req.user.tenantId)
     if (!student) {
       return res.status(404).json({ error: 'Student not found.' })
     }
@@ -401,7 +676,7 @@ app.post('/api/students/:id/payments', requireAuth, requireAdmin, async (req, re
       args: [crypto.randomUUID(), req.params.id, amount, date, note],
     })
 
-    const row = await getStudentRow(req.params.id)
+    const row = await getStudentRow(req.params.id, req.user.tenantId)
     res.status(201).json(await mapStudent(row))
   } catch (error) {
     next(error)
@@ -411,8 +686,11 @@ app.post('/api/students/:id/payments', requireAuth, requireAdmin, async (req, re
 app.delete('/api/payments/:id', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const payment = await db.execute({
-      sql: 'SELECT student_id FROM payments WHERE id = ?',
-      args: [req.params.id],
+      sql: `SELECT p.student_id
+            FROM payments p
+            JOIN students s ON s.id = p.student_id
+            WHERE p.id = ? AND s.tenant_id = ?`,
+      args: [req.params.id, req.user.tenantId],
     })
 
     if (!payment.rows[0]) {
@@ -424,7 +702,7 @@ app.delete('/api/payments/:id', requireAuth, requireAdmin, async (req, res, next
       args: [req.params.id],
     })
 
-    const row = await getStudentRow(payment.rows[0].student_id)
+    const row = await getStudentRow(payment.rows[0].student_id, req.user.tenantId)
     res.json(await mapStudent(row))
   } catch (error) {
     next(error)
@@ -435,10 +713,10 @@ function playerNameMap(players) {
   return new Map(players.map((p) => [p.id, p.name]))
 }
 
-async function loadTournament(id) {
+async function loadTournament(id, tenantId) {
   const tournamentResult = await db.execute({
-    sql: 'SELECT * FROM tournaments WHERE id = ?',
-    args: [id],
+    sql: 'SELECT * FROM tournaments WHERE id = ? AND tenant_id = ?',
+    args: [id, tenantId],
   })
   const row = tournamentResult.rows[0]
   if (!row) return null
@@ -515,13 +793,14 @@ async function loadTournament(id) {
   }
 }
 
-app.get('/api/tournaments', requireAuth, async (_req, res, next) => {
+app.get('/api/tournaments', requireAuth, async (req, res, next) => {
   try {
-    const result = await db.execute(
-      'SELECT * FROM tournaments ORDER BY created_at DESC',
-    )
+    const result = await db.execute({
+      sql: 'SELECT * FROM tournaments WHERE tenant_id = ? ORDER BY created_at DESC',
+      args: [req.user.tenantId],
+    })
     const tournaments = await Promise.all(
-      result.rows.map((row) => loadTournament(row.id)),
+      result.rows.map((row) => loadTournament(row.id, req.user.tenantId)),
     )
     res.json(tournaments)
   } catch (error) {
@@ -538,11 +817,11 @@ app.post('/api/tournaments', requireAuth, requireAdmin, async (req, res, next) =
 
     const id = crypto.randomUUID()
     await db.execute({
-      sql: `INSERT INTO tournaments (id, name, category, rounds, current_round, status, created_at)
-            VALUES (?, ?, 'open', 0, 0, 'setup', ?)`,
-      args: [id, name, new Date().toISOString()],
+      sql: `INSERT INTO tournaments (id, name, category, rounds, current_round, status, tenant_id, created_at)
+            VALUES (?, ?, 'open', 0, 0, 'setup', ?, ?)`,
+      args: [id, name, req.user.tenantId, new Date().toISOString()],
     })
-    res.status(201).json(await loadTournament(id))
+    res.status(201).json(await loadTournament(id, req.user.tenantId))
   } catch (error) {
     next(error)
   }
@@ -551,8 +830,8 @@ app.post('/api/tournaments', requireAuth, requireAdmin, async (req, res, next) =
 app.delete('/api/tournaments/:id', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const result = await db.execute({
-      sql: 'DELETE FROM tournaments WHERE id = ?',
-      args: [req.params.id],
+      sql: 'DELETE FROM tournaments WHERE id = ? AND tenant_id = ?',
+      args: [req.params.id, req.user.tenantId],
     })
     if ((result.rowsAffected ?? 0) === 0) {
       return res.status(404).json({ error: 'Tournament not found.' })
@@ -565,7 +844,7 @@ app.delete('/api/tournaments/:id', requireAuth, requireAdmin, async (req, res, n
 
 app.post('/api/tournaments/:id/players', requireAuth, requireAdmin, async (req, res, next) => {
   try {
-    const tournament = await loadTournament(req.params.id)
+    const tournament = await loadTournament(req.params.id, req.user.tenantId)
     if (!tournament) {
       return res.status(404).json({ error: 'Tournament not found.' })
     }
@@ -578,7 +857,7 @@ app.post('/api/tournaments/:id/players', requireAuth, requireAdmin, async (req, 
     let category = String(req.body?.category ?? '').trim()
 
     if (studentId) {
-      const student = await getStudentRow(studentId)
+      const student = await getStudentRow(studentId, req.user.tenantId)
       if (!student) {
         return res.status(404).json({ error: 'Student not found.' })
       }
@@ -602,7 +881,7 @@ app.post('/api/tournaments/:id/players', requireAuth, requireAdmin, async (req, 
             VALUES (?, ?, ?, ?, ?)`,
       args: [crypto.randomUUID(), req.params.id, studentId, name, category],
     })
-    res.status(201).json(await loadTournament(req.params.id))
+    res.status(201).json(await loadTournament(req.params.id, req.user.tenantId))
   } catch (error) {
     next(error)
   }
@@ -610,7 +889,7 @@ app.post('/api/tournaments/:id/players', requireAuth, requireAdmin, async (req, 
 
 app.delete('/api/tournaments/:id/players/:playerId', requireAuth, requireAdmin, async (req, res, next) => {
   try {
-    const tournament = await loadTournament(req.params.id)
+    const tournament = await loadTournament(req.params.id, req.user.tenantId)
     if (!tournament) {
       return res.status(404).json({ error: 'Tournament not found.' })
     }
@@ -622,7 +901,7 @@ app.delete('/api/tournaments/:id/players/:playerId', requireAuth, requireAdmin, 
       sql: 'DELETE FROM tournament_players WHERE id = ? AND tournament_id = ?',
       args: [req.params.playerId, req.params.id],
     })
-    res.json(await loadTournament(req.params.id))
+    res.json(await loadTournament(req.params.id, req.user.tenantId))
   } catch (error) {
     next(error)
   }
@@ -630,7 +909,7 @@ app.delete('/api/tournaments/:id/players/:playerId', requireAuth, requireAdmin, 
 
 app.post('/api/tournaments/:id/pair', requireAuth, requireAdmin, async (req, res, next) => {
   try {
-    const tournament = await loadTournament(req.params.id)
+    const tournament = await loadTournament(req.params.id, req.user.tenantId)
     if (!tournament) {
       return res.status(404).json({ error: 'Tournament not found.' })
     }
@@ -708,7 +987,7 @@ app.post('/api/tournaments/:id/pair', requireAuth, requireAdmin, async (req, res
       ],
     })
 
-    res.json(await loadTournament(req.params.id))
+    res.json(await loadTournament(req.params.id, req.user.tenantId))
   } catch (error) {
     next(error)
   }
@@ -716,7 +995,7 @@ app.post('/api/tournaments/:id/pair', requireAuth, requireAdmin, async (req, res
 
 app.put('/api/tournaments/:id/pairings/:pairingId', requireAuth, requireAdmin, async (req, res, next) => {
   try {
-    const tournament = await loadTournament(req.params.id)
+    const tournament = await loadTournament(req.params.id, req.user.tenantId)
     if (!tournament) {
       return res.status(404).json({ error: 'Tournament not found.' })
     }
@@ -739,7 +1018,7 @@ app.put('/api/tournaments/:id/pairings/:pairingId', requireAuth, requireAdmin, a
       args: [result, req.params.pairingId],
     })
 
-    const updated = await loadTournament(req.params.id)
+    const updated = await loadTournament(req.params.id, req.user.tenantId)
     const lastRoundDone =
       updated.currentRound >= updated.rounds &&
       updated.pairings
@@ -751,7 +1030,7 @@ app.put('/api/tournaments/:id/pairings/:pairingId', requireAuth, requireAdmin, a
         sql: `UPDATE tournaments SET status = 'completed' WHERE id = ?`,
         args: [req.params.id],
       })
-      res.json(await loadTournament(req.params.id))
+      res.json(await loadTournament(req.params.id, req.user.tenantId))
       return
     }
 

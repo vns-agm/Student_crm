@@ -16,6 +16,7 @@ export function createToken(user) {
     sub: user.id,
     username: user.username,
     role: user.role,
+    tenantId: user.tenant_id || user.tenantId,
     exp: Date.now() + TOKEN_TTL_MS,
   }
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url')
@@ -46,7 +47,9 @@ export function verifyToken(token) {
   try {
     const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'))
     if (!payload?.exp || payload.exp < Date.now()) return null
-    if (!payload.sub || !payload.username || !payload.role) return null
+    if (!payload.sub || !payload.username || !payload.role || !payload.tenantId) {
+      return null
+    }
     return payload
   } catch {
     return null
@@ -66,6 +69,7 @@ export function requireAuth(req, res, next) {
     id: payload.sub,
     username: payload.username,
     role: payload.role,
+    tenantId: payload.tenantId,
   }
   next()
 }

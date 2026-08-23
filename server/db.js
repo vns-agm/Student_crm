@@ -5,6 +5,8 @@ import { createClient } from '@libsql/client'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+export const DEFAULT_TENANT_ID = '00000000-0000-4000-8000-000000000001'
+
 function createDbClient() {
   const url = process.env.TURSO_DATABASE_URL?.trim()
   const authToken = process.env.TURSO_AUTH_TOKEN?.trim()
@@ -14,7 +16,6 @@ function createDbClient() {
   }
 
   if (process.env.VERCEL) {
-    // Avoid crashing at import time; ensureDb() returns a clear API error.
     return null
   }
 
@@ -38,6 +39,28 @@ async function ensureColumn(table, column, definition) {
   }
 }
 
+function mapTenantRow(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    displayName: row.display_name,
+    logoUrl: row.logo_url || '',
+    primaryColor: row.primary_color || '#1a4d3e',
+    accentColor: row.accent_color || '#b8892c',
+    createdAt: row.created_at,
+  }
+}
+
+export async function getTenantById(id) {
+  const result = await db.execute({
+    sql: 'SELECT * FROM tenants WHERE id = ?',
+    args: [id],
+  })
+  return mapTenantRow(result.rows[0])
+}
+
 let initPromise
 
 export function ensureDb() {
@@ -50,6 +73,17 @@ export function ensureDb() {
       }
 
       await db.executeMultiple(`
+        CREATE TABLE IF NOT EXISTS tenants (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          slug TEXT NOT NULL UNIQUE,
+          display_name TEXT NOT NULL,
+          logo_url TEXT NOT NULL DEFAULT '',
+          primary_color TEXT NOT NULL DEFAULT '#1a4d3e',
+          accent_color TEXT NOT NULL DEFAULT '#b8892c',
+          created_at TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS students (
           id TEXT PRIMARY KEY,
           name TEXT NOT NULL,
@@ -61,6 +95,7 @@ export function ensureDb() {
           total_fees REAL NOT NULL DEFAULT 0,
           amount_paid REAL NOT NULL DEFAULT 0,
           category TEXT NOT NULL DEFAULT 'open',
+          tenant_id TEXT,
           created_at TEXT NOT NULL
         );
 
@@ -87,6 +122,7 @@ export function ensureDb() {
           username TEXT NOT NULL UNIQUE,
           password_hash TEXT NOT NULL,
           role TEXT NOT NULL CHECK (role IN ('admin', 'parent')),
+          tenant_id TEXT,
           created_at TEXT NOT NULL
         );
 
@@ -97,6 +133,7 @@ export function ensureDb() {
           rounds INTEGER NOT NULL DEFAULT 0,
           current_round INTEGER NOT NULL DEFAULT 0,
           status TEXT NOT NULL DEFAULT 'setup',
+          tenant_id TEXT,
           created_at TEXT NOT NULL
         );
 
@@ -127,7 +164,46 @@ export function ensureDb() {
       await ensureColumn('students', 'batch', "TEXT NOT NULL DEFAULT 'beginner'")
       await ensureColumn('students', 'amount_paid', 'REAL NOT NULL DEFAULT 0')
       await ensureColumn('students', 'category', "TEXT NOT NULL DEFAULT 'open'")
+      await ensureColumn('students', 'tenant_id', 'TEXT')
+      await ensureColumn('users', 'tenant_id', 'TEXT')
+      await ensureColumn('tournaments', 'tenant_id', 'TEXT')
       await ensureColumn('tournament_players', 'category', "TEXT NOT NULL DEFAULT 'open'")
+
+      const existingTenant = await db.execute({
+        sql: 'SELECT id FROM tenants WHERE id = ?',
+        args: [DEFAULT_TENANT_ID],
+      })
+      if (!existingTenant.rows[0]) {
+        await db.execute({
+          sql: `INSERT INTO tenants (
+                  id, name, slug, display_name, logo_url,
+                  primary_color, accent_color, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          args: [
+            DEFAULT_TENANT_ID,
+            'Agm-Chess Classes',
+            'agm-chess',
+            'Agm-Chess Classes',
+            '',
+            '#1a4d3e',
+            '#b8892c',
+            new Date().toISOString(),
+          ],
+        })
+      }
+
+      await db.execute({
+        sql: 'UPDATE users SET tenant_id = ? WHERE tenant_id IS NULL OR tenant_id = \'\'',
+        args: [DEFAULT_TENANT_ID],
+      })
+      await db.execute({
+        sql: 'UPDATE students SET tenant_id = ? WHERE tenant_id IS NULL OR tenant_id = \'\'',
+        args: [DEFAULT_TENANT_ID],
+      })
+      await db.execute({
+        sql: 'UPDATE tournaments SET tenant_id = ? WHERE tenant_id IS NULL OR tenant_id = \'\'',
+        args: [DEFAULT_TENANT_ID],
+      })
 
       const { hashPassword } = await import('./auth.js')
       const defaults = [
@@ -142,13 +218,14 @@ export function ensureDb() {
         })
         if (!existing.rows[0]) {
           await db.execute({
-            sql: `INSERT INTO users (id, username, password_hash, role, created_at)
-                  VALUES (?, ?, ?, ?, ?)`,
+            sql: `INSERT INTO users (id, username, password_hash, role, tenant_id, created_at)
+                  VALUES (?, ?, ?, ?, ?, ?)`,
             args: [
               crypto.randomUUID(),
               account.username,
               hashPassword(account.password),
               account.role,
+              DEFAULT_TENANT_ID,
               new Date().toISOString(),
             ],
           })
@@ -159,3 +236,5 @@ export function ensureDb() {
 
   return initPromise
 }
+
+export { mapTenantRow }

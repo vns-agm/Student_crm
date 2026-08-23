@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { AuthUser } from '../types'
+import { applyBranding } from '../utils/branding'
 
 const STORAGE_KEY = 'agm-chess-auth'
 
@@ -55,6 +56,7 @@ export function useAuth() {
           const next = { token: stored.token, user: body.user }
           localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
           setAuth(next)
+          applyBranding(body.user.branding)
         }
       } catch {
         if (!cancelled) {
@@ -95,6 +97,7 @@ export function useAuth() {
       const next = { token: body.token, user: body.user }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
       setAuth(next)
+      applyBranding(body.user.branding)
       return body.user
     } catch (err) {
       if (err instanceof Error) throw err

@@ -31,7 +31,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
       <div className="login-hero">
         <ChessLoginScene />
         <div className="login-hero-copy">
-          <h1 className="login-hero-title">Agm-Chess Classes</h1>
+          <h1 className="login-hero-title">Student CRM</h1>
         </div>
       </div>
 
@@ -40,7 +40,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
           <span className="brand-mark" aria-hidden="true" />
           <div>
             <h2>Welcome back</h2>
-            <p className="muted">Sign in to continue</p>
+            <p className="muted">Sign in to your academy CRM</p>
           </div>
         </div>
 

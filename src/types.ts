@@ -109,11 +109,32 @@ export type View =
   | 'attendance'
   | 'fees'
   | 'tournament'
+  | 'settings'
 
 export type UserRole = 'admin' | 'parent'
+
+export interface TenantBranding {
+  id: string
+  name: string
+  slug: string
+  displayName: string
+  logoUrl: string
+  primaryColor: string
+  accentColor: string
+  createdAt: string
+}
 
 export interface AuthUser {
   id: string
   username: string
   role: UserRole
+  tenantId: string
+  branding?: TenantBranding | null
+}
+
+export interface TenantUser {
+  id: string
+  username: string
+  role: UserRole
+  createdAt: string
 }

@@ -1,10 +1,11 @@
-import type { AuthUser, UserRole, View } from '../types'
+import type { AuthUser, TenantBranding, UserRole, View } from '../types'
 
 interface SidebarProps {
   current: View
   onChange: (view: View) => void
   studentCount: number
   user: AuthUser
+  branding?: TenantBranding | null
   onLogout: () => void
 }
 
@@ -15,6 +16,7 @@ const allLinks: { id: View; label: string; hint: string; roles: UserRole[] }[] =
   { id: 'attendance', label: 'Attendance', hint: 'Daily roll', roles: ['admin'] },
   { id: 'fees', label: 'Fees', hint: 'Payments', roles: ['admin'] },
   { id: 'tournament', label: 'Tournament', hint: 'Swiss pairing', roles: ['admin', 'parent'] },
+  { id: 'settings', label: 'White-label', hint: 'Brand & coaches', roles: ['admin'] },
 ]
 
 export function Sidebar({
@@ -22,16 +24,23 @@ export function Sidebar({
   onChange,
   studentCount,
   user,
+  branding,
   onLogout,
 }: SidebarProps) {
   const links = allLinks.filter((link) => link.roles.includes(user.role))
+  const displayName = branding?.displayName || 'Agm-Chess Classes'
+  const logoUrl = branding?.logoUrl || ''
 
   return (
     <aside className="sidebar">
       <div className="brand">
-        <span className="brand-mark" aria-hidden="true" />
+        {logoUrl ? (
+          <img className="brand-logo" src={logoUrl} alt="" />
+        ) : (
+          <span className="brand-mark" aria-hidden="true" />
+        )}
         <div>
-          <p className="brand-name">Agm-Chess Classes</p>
+          <p className="brand-name">{displayName}</p>
           <p className="brand-tag">Student CRM</p>
         </div>
       </div>
