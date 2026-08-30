@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { request } from '../api'
 import type { AttendanceStatus, Student, StudentDetailsInput } from '../types'
-import { SESSIONS_PER_CYCLE } from '../types'
+import { DEFAULT_SESSIONS_PER_CYCLE } from '../types'
 
 export function useStudents() {
   const [students, setStudents] = useState<Student[]>([])
@@ -149,11 +149,14 @@ export function sessionsInCycle(student: Student): number {
   return Math.max(0, classesHeld(student) - (student.cycleStartClasses ?? 0))
 }
 
+export function cycleLimit(student: Student): number {
+  const n = student.numberOfClasses
+  if (Number.isInteger(n) && n >= 1) return n
+  return DEFAULT_SESSIONS_PER_CYCLE
+}
+
 export function isRenewalPending(student: Student): boolean {
-  if (typeof student.renewalPending === 'boolean') {
-    return student.renewalPending
-  }
-  return sessionsInCycle(student) >= SESSIONS_PER_CYCLE
+  return sessionsInCycle(student) >= cycleLimit(student)
 }
 
 export function renewalCount(student: Student): number {
@@ -163,7 +166,7 @@ export function renewalCount(student: Student): number {
   return student.renewals?.length ?? 0
 }
 
-export { SESSIONS_PER_CYCLE }
+export { DEFAULT_SESSIONS_PER_CYCLE as SESSIONS_PER_CYCLE }
 
 export function attendanceRate(student: Student): number {
   if (student.attendance.length === 0) return 0

@@ -14,7 +14,11 @@ const app = express()
 const PORT = process.env.PORT || 3001
 const BATCHES = new Set(['beginner', 'intermediate', 'advanced'])
 const CATEGORIES = new Set(['u10', 'u15', 'open'])
-const SESSIONS_PER_CYCLE = 8
+function cycleLimit(row) {
+  const n = Number(row.number_of_classes)
+  if (Number.isInteger(n) && n >= 1) return n
+  return 8
+}
 
 function countClassesHeld(attendanceRows) {
   return attendanceRows.filter(
@@ -75,6 +79,7 @@ async function mapStudent(row) {
   const classesHeld = countClassesHeld(attendance.rows)
   const cycleStart = row.cycle_start_classes ?? 0
   const sessionsInCycle = Math.max(0, classesHeld - cycleStart)
+  const packageClasses = cycleLimit(row)
 
   return {
     id: row.id,
@@ -89,7 +94,7 @@ async function mapStudent(row) {
     amountPaid: row.amount_paid ?? 0,
     cycleStartClasses: cycleStart,
     sessionsInCycle,
-    renewalPending: sessionsInCycle >= SESSIONS_PER_CYCLE,
+    renewalPending: sessionsInCycle >= packageClasses,
     renewalCount: renewals.rows.length,
     createdAt: row.created_at,
     attendance: attendance.rows,

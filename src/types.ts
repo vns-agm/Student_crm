@@ -41,7 +41,7 @@ export interface RenewalRecord {
   createdAt: string
 }
 
-export const SESSIONS_PER_CYCLE = 8
+export const DEFAULT_SESSIONS_PER_CYCLE = 8
 
 export interface StudentDetailsInput {
   name: string

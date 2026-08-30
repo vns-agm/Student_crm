@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
+  cycleLimit,
   isRenewalPending,
   renewalCount,
   sessionsInCycle,
   totalPaid,
 } from '../hooks/useStudents'
-import { BATCH_OPTIONS, SESSIONS_PER_CYCLE } from '../types'
+import { BATCH_OPTIONS } from '../types'
 import type { Batch, Student, TenantBranding } from '../types'
 import { useToast } from './ToastProvider'
 import { downloadPaymentReceipt } from '../utils/receipt'
@@ -100,8 +101,8 @@ export function RenewalView({
         <div>
           <h1>Renewal</h1>
           <p className="muted">
-            After {SESSIONS_PER_CYCLE} classes in a cycle, renewal is pending.
-            Record payment and download a branded receipt.
+            Renewal is pending once a student completes their enrolled package
+            (e.g. 4 or 8 classes). Record payment and download a branded receipt.
           </p>
         </div>
         <button type="button" className="btn ghost" onClick={onGoFees}>
@@ -113,7 +114,7 @@ export function RenewalView({
         <article className="stat-card">
           <p className="stat-label">Renewal pending</p>
           <p className="stat-value accent">{pending.length}</p>
-          <p className="stat-sub muted">Students at {SESSIONS_PER_CYCLE}+ sessions</p>
+          <p className="stat-sub muted">Students who finished their package</p>
         </article>
         <article className="stat-card">
           <p className="stat-label">Total renewals</p>
@@ -152,7 +153,7 @@ export function RenewalView({
               <div>
                 <span className="muted">Sessions this cycle</span>
                 <strong>
-                  {sessionsInCycle(selected)}/{SESSIONS_PER_CYCLE}
+                  {sessionsInCycle(selected)}/{cycleLimit(selected)}
                 </strong>
               </div>
               <div>
@@ -262,7 +263,7 @@ export function RenewalView({
                       <span className="pill">{batchLabel(s.batch)}</span>
                     </td>
                     <td>
-                      {sessionsInCycle(s)}/{SESSIONS_PER_CYCLE}
+                      {sessionsInCycle(s)}/{cycleLimit(s)}
                     </td>
                     <td>{renewalCount(s)}</td>
                     <td>{last ? formatDate(last.date) : '—'}</td>

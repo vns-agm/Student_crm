@@ -189,7 +189,7 @@ export function FeesView({
               onChange={(e) => setIsRenewal(e.target.checked)}
             />
             <span>
-              Mark as renewal (resets the 8-session cycle after payment)
+              Mark as renewal (resets the session cycle after payment)
             </span>
           </label>
 
