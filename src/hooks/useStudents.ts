@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { request } from '../api'
 import type { AttendanceStatus, Student, StudentDetailsInput } from '../types'
+import { SESSIONS_PER_CYCLE } from '../types'
 
 export function useStudents() {
   const [students, setStudents] = useState<Student[]>([])
@@ -91,15 +92,17 @@ export function useStudents() {
     amount: number,
     date: string,
     note: string,
+    isRenewal = false,
   ) {
     const updated = await request<Student>(
       `/api/students/${studentId}/payments`,
       {
         method: 'POST',
-        body: JSON.stringify({ amount, date, note }),
+        body: JSON.stringify({ amount, date, note, isRenewal }),
       },
     )
     setStudents((prev) => prev.map((s) => (s.id === studentId ? updated : s)))
+    return updated
   }
 
   async function deletePayment(studentId: string, paymentId: string) {
@@ -138,6 +141,29 @@ export function classesHeld(student: Student): number {
     (a) => a.status === 'present' || a.status === 'late',
   ).length
 }
+
+export function sessionsInCycle(student: Student): number {
+  if (typeof student.sessionsInCycle === 'number') {
+    return student.sessionsInCycle
+  }
+  return Math.max(0, classesHeld(student) - (student.cycleStartClasses ?? 0))
+}
+
+export function isRenewalPending(student: Student): boolean {
+  if (typeof student.renewalPending === 'boolean') {
+    return student.renewalPending
+  }
+  return sessionsInCycle(student) >= SESSIONS_PER_CYCLE
+}
+
+export function renewalCount(student: Student): number {
+  if (typeof student.renewalCount === 'number') {
+    return student.renewalCount
+  }
+  return student.renewals?.length ?? 0
+}
+
+export { SESSIONS_PER_CYCLE }
 
 export function attendanceRate(student: Student): number {
   if (student.attendance.length === 0) return 0

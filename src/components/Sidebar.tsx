@@ -21,6 +21,7 @@ const allLinks: {
   { id: 'students', label: 'Students', hint: 'All records', roles: ['admin'] },
   { id: 'attendance', label: 'Attendance', hint: 'Daily roll', roles: ['admin'] },
   { id: 'fees', label: 'Fees', hint: 'Payments', roles: ['admin'] },
+  { id: 'renewal', label: 'Renewal', hint: '8-session cycles', roles: ['admin'] },
   { id: 'tournament', label: 'Tournament', hint: 'Swiss pairing', roles: ['admin', 'parent'] },
   {
     id: 'settings',

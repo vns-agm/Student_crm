@@ -289,6 +289,26 @@ tbody tr:hover {
   font-weight: 700;
 }
 
+.pill.renewal-pending {
+  background: rgba(184, 137, 44, 0.18);
+  color: #a16207;
+}
+
+.checkbox-row {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.9rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.checkbox-row input {
+  width: auto;
+  margin: 0;
+}
+
 .text-ok {
   color: var(--ok);
   font-weight: 700;

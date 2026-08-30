@@ -114,6 +114,20 @@ export function ensureDb() {
           amount REAL NOT NULL,
           date TEXT NOT NULL,
           note TEXT NOT NULL DEFAULT '',
+          is_renewal INTEGER NOT NULL DEFAULT 0,
+          FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS renewals (
+          id TEXT PRIMARY KEY,
+          student_id TEXT NOT NULL,
+          payment_id TEXT,
+          amount REAL NOT NULL,
+          date TEXT NOT NULL,
+          note TEXT NOT NULL DEFAULT '',
+          classes_at_renewal INTEGER NOT NULL DEFAULT 0,
+          sessions_in_cycle INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL,
           FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
         );
 
@@ -165,6 +179,8 @@ export function ensureDb() {
       await ensureColumn('students', 'amount_paid', 'REAL NOT NULL DEFAULT 0')
       await ensureColumn('students', 'category', "TEXT NOT NULL DEFAULT 'open'")
       await ensureColumn('students', 'tenant_id', 'TEXT')
+      await ensureColumn('students', 'cycle_start_classes', 'INTEGER NOT NULL DEFAULT 0')
+      await ensureColumn('payments', 'is_renewal', 'INTEGER NOT NULL DEFAULT 0')
       await ensureColumn('users', 'tenant_id', 'TEXT')
       await ensureColumn('users', 'is_owner', 'INTEGER NOT NULL DEFAULT 0')
       await ensureColumn('tournaments', 'tenant_id', 'TEXT')

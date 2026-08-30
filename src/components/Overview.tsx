@@ -3,6 +3,7 @@ import {
   attendanceRate,
   balanceDue,
   classesHeld,
+  isRenewalPending,
   totalPaid,
 } from '../hooks/useStudents'
 import { BATCH_OPTIONS } from '../types'
@@ -21,6 +22,7 @@ interface OverviewProps {
   onGoStudents: () => void
   onGoAttendance: () => void
   onGoFees: () => void
+  onGoRenewal: () => void
   onDelete: (id: string) => Promise<unknown>
 }
 
@@ -35,9 +37,11 @@ export function Overview({
   onGoStudents,
   onGoAttendance,
   onGoFees,
+  onGoRenewal,
   onDelete,
 }: OverviewProps) {
   const [viewing, setViewing] = useState<Student | null>(null)
+  const renewalPendingCount = students.filter((s) => isRenewalPending(s)).length
   const totalFeesCollected = students.reduce((sum, s) => sum + totalPaid(s), 0)
   const totalOutstanding = students.reduce((sum, s) => sum + balanceDue(s), 0)
   const avgAttendance =
@@ -109,6 +113,15 @@ export function Overview({
               </button>
             </article>
             <article className="stat-card">
+              <p className="stat-label">Renewal pending</p>
+              <p className="stat-value accent">{renewalPendingCount}</p>
+              {!readOnly ? (
+                <button type="button" className="link-btn" onClick={onGoRenewal}>
+                  Manage renewals
+                </button>
+              ) : null}
+            </article>
+            <article className="stat-card">
               <p className="stat-label">Outstanding</p>
               <p className="stat-value accent">
                 ₹{totalOutstanding.toLocaleString('en-IN')}
@@ -129,6 +142,7 @@ export function Overview({
               <th>Age</th>
               <th>Batch</th>
               <th>Classes held</th>
+              <th>Renewal</th>
               <th>Attendance</th>
               <th>Paid</th>
               <th>Balance</th>
@@ -138,7 +152,7 @@ export function Overview({
           <tbody>
             {students.length === 0 ? (
               <tr>
-                <td colSpan={8} className="empty-cell">
+                <td colSpan={9} className="empty-cell">
                   No student records to show yet.
                 </td>
               </tr>
@@ -151,6 +165,13 @@ export function Overview({
                     <span className="pill">{batchLabel(s.batch)}</span>
                   </td>
                   <td>{classesHeld(s)}</td>
+                  <td>
+                    {isRenewalPending(s) ? (
+                      <span className="pill renewal-pending">Pending</span>
+                    ) : (
+                      <span className="muted">—</span>
+                    )}
+                  </td>
                   <td>
                     <span className="pill">{attendanceRate(s)}%</span>
                   </td>

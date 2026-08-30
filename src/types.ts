@@ -27,7 +27,21 @@ export interface FeePayment {
   amount: number
   date: string
   note: string
+  isRenewal?: boolean
 }
+
+export interface RenewalRecord {
+  id: string
+  paymentId: string | null
+  amount: number
+  date: string
+  note: string
+  classesAtRenewal: number
+  sessionsInCycle: number
+  createdAt: string
+}
+
+export const SESSIONS_PER_CYCLE = 8
 
 export interface StudentDetailsInput {
   name: string
@@ -43,8 +57,13 @@ export interface StudentDetailsInput {
 export interface Student extends StudentDetailsInput {
   id: string
   totalFees: number
+  cycleStartClasses: number
+  sessionsInCycle: number
+  renewalPending: boolean
+  renewalCount: number
   attendance: AttendanceRecord[]
   payments: FeePayment[]
+  renewals: RenewalRecord[]
   createdAt: string
 }
 
@@ -108,6 +127,7 @@ export type View =
   | 'students'
   | 'attendance'
   | 'fees'
+  | 'renewal'
   | 'tournament'
   | 'settings'
 

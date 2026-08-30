@@ -14,6 +14,13 @@ const app = express()
 const PORT = process.env.PORT || 3001
 const BATCHES = new Set(['beginner', 'intermediate', 'advanced'])
 const CATEGORIES = new Set(['u10', 'u15', 'open'])
+const SESSIONS_PER_CYCLE = 8
+
+function countClassesHeld(attendanceRows) {
+  return attendanceRows.filter(
+    (a) => a.status === 'present' || a.status === 'late',
+  ).length
+}
 
 app.use(cors())
 app.use(express.json())
@@ -50,12 +57,24 @@ async function mapStudent(row) {
   })
 
   const payments = await db.execute({
-    sql: `SELECT id, amount, date, note
+    sql: `SELECT id, amount, date, note, is_renewal
           FROM payments
           WHERE student_id = ?
           ORDER BY date DESC, rowid DESC`,
     args: [row.id],
   })
+
+  const renewals = await db.execute({
+    sql: `SELECT id, payment_id, amount, date, note, classes_at_renewal, sessions_in_cycle, created_at
+          FROM renewals
+          WHERE student_id = ?
+          ORDER BY created_at DESC`,
+    args: [row.id],
+  })
+
+  const classesHeld = countClassesHeld(attendance.rows)
+  const cycleStart = row.cycle_start_classes ?? 0
+  const sessionsInCycle = Math.max(0, classesHeld - cycleStart)
 
   return {
     id: row.id,
@@ -68,9 +87,29 @@ async function mapStudent(row) {
     category: row.category || 'open',
     totalFees: row.total_fees,
     amountPaid: row.amount_paid ?? 0,
+    cycleStartClasses: cycleStart,
+    sessionsInCycle,
+    renewalPending: sessionsInCycle >= SESSIONS_PER_CYCLE,
+    renewalCount: renewals.rows.length,
     createdAt: row.created_at,
     attendance: attendance.rows,
-    payments: payments.rows,
+    payments: payments.rows.map((p) => ({
+      id: p.id,
+      amount: p.amount,
+      date: p.date,
+      note: p.note,
+      isRenewal: Boolean(p.is_renewal),
+    })),
+    renewals: renewals.rows.map((r) => ({
+      id: r.id,
+      paymentId: r.payment_id,
+      amount: r.amount,
+      date: r.date,
+      note: r.note,
+      classesAtRenewal: r.classes_at_renewal,
+      sessionsInCycle: r.sessions_in_cycle,
+      createdAt: r.created_at,
+    })),
   }
 }
 
@@ -664,6 +703,7 @@ app.post('/api/students/:id/payments', requireAuth, requireAdmin, async (req, re
     const amount = Number(req.body?.amount)
     const date = String(req.body?.date ?? '')
     const note = String(req.body?.note ?? '').trim()
+    const isRenewal = Boolean(req.body?.isRenewal)
 
     if (!Number.isFinite(amount) || amount <= 0) {
       return res.status(400).json({ error: 'Enter a valid payment amount.' })
@@ -672,11 +712,44 @@ app.post('/api/students/:id/payments', requireAuth, requireAdmin, async (req, re
       return res.status(400).json({ error: 'Valid date is required (YYYY-MM-DD).' })
     }
 
-    await db.execute({
-      sql: `INSERT INTO payments (id, student_id, amount, date, note)
-            VALUES (?, ?, ?, ?, ?)`,
-      args: [crypto.randomUUID(), req.params.id, amount, date, note],
+    const attendance = await db.execute({
+      sql: `SELECT status FROM attendance WHERE student_id = ?`,
+      args: [req.params.id],
     })
+    const classesHeld = countClassesHeld(attendance.rows)
+    const cycleStart = student.cycle_start_classes ?? 0
+    const sessionsInCycle = Math.max(0, classesHeld - cycleStart)
+
+    const paymentId = crypto.randomUUID()
+    await db.execute({
+      sql: `INSERT INTO payments (id, student_id, amount, date, note, is_renewal)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [paymentId, req.params.id, amount, date, note, isRenewal ? 1 : 0],
+    })
+
+    if (isRenewal) {
+      await db.execute({
+        sql: `INSERT INTO renewals (
+                id, student_id, payment_id, amount, date, note,
+                classes_at_renewal, sessions_in_cycle, created_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          crypto.randomUUID(),
+          req.params.id,
+          paymentId,
+          amount,
+          date,
+          note,
+          classesHeld,
+          sessionsInCycle,
+          new Date().toISOString(),
+        ],
+      })
+      await db.execute({
+        sql: 'UPDATE students SET cycle_start_classes = ? WHERE id = ?',
+        args: [classesHeld, req.params.id],
+      })
+    }
 
     const row = await getStudentRow(req.params.id, req.user.tenantId)
     res.status(201).json(await mapStudent(row))

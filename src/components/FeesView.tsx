@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
-import { balanceDue, totalPaid } from '../hooks/useStudents'
-import type { Student } from '../types'
+import { balanceDue, isRenewalPending, totalPaid } from '../hooks/useStudents'
+import type { Student, TenantBranding } from '../types'
+import { downloadPaymentReceipt } from '../utils/receipt'
+import { useToast } from './ToastProvider'
 
 interface FeesViewProps {
   students: Student[]
+  branding?: TenantBranding | null
   onAddPayment: (
     studentId: string,
     amount: number,
     date: string,
     note: string,
-  ) => Promise<unknown>
+    isRenewal?: boolean,
+  ) => Promise<Student>
   onDeletePayment: (studentId: string, paymentId: string) => Promise<unknown>
 }
 
@@ -20,13 +24,16 @@ function todayISO() {
 
 export function FeesView({
   students,
+  branding,
   onAddPayment,
   onDeletePayment,
 }: FeesViewProps) {
+  const { showToast } = useToast()
   const [studentId, setStudentId] = useState(students[0]?.id ?? '')
   const [amount, setAmount] = useState('')
   const [date, setDate] = useState(todayISO)
   const [note, setNote] = useState('')
+  const [isRenewal, setIsRenewal] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -40,6 +47,12 @@ export function FeesView({
     () => students.find((s) => s.id === studentId) ?? null,
     [students, studentId],
   )
+
+  useEffect(() => {
+    if (selected) {
+      setIsRenewal(isRenewalPending(selected))
+    }
+  }, [selected?.id, selected?.sessionsInCycle])
 
   const allPayments = useMemo(
     () =>
@@ -71,7 +84,18 @@ export function FeesView({
 
     try {
       setSaving(true)
-      await onAddPayment(studentId, value, date, note)
+      const updated = await onAddPayment(studentId, value, date, note, isRenewal)
+      const payment = updated.payments[0]
+      if (payment) {
+        await downloadPaymentReceipt({
+          student: updated,
+          payment,
+          branding,
+          renewalNumber: updated.renewalCount,
+          isRenewal,
+        })
+        showToast('Payment saved — receipt downloaded', 'success')
+      }
       setAmount('')
       setNote('')
     } catch (err) {
@@ -81,13 +105,28 @@ export function FeesView({
     }
   }
 
+  async function handleReceipt(
+    student: Student,
+    paymentId: string,
+  ) {
+    const payment = student.payments.find((p) => p.id === paymentId)
+    if (!payment) return
+    await downloadPaymentReceipt({
+      student,
+      payment,
+      branding,
+      renewalNumber: student.renewalCount,
+      isRenewal: payment.isRenewal,
+    })
+  }
+
   return (
     <section className="panel">
       <header className="panel-header">
         <div>
           <h1>Fees</h1>
           <p className="muted">
-            Record only amounts students actually paid. No sample fees are stored.
+            Record payments and download a branded receipt for your academy.
           </p>
         </div>
       </header>
@@ -108,6 +147,7 @@ export function FeesView({
                 students.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
+                    {isRenewalPending(s) ? ' · Renewal pending' : ''}
                   </option>
                 ))
               )}
@@ -141,6 +181,17 @@ export function FeesView({
               {selected.paymentDate || '—'}
             </p>
           ) : null}
+
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={isRenewal}
+              onChange={(e) => setIsRenewal(e.target.checked)}
+            />
+            <span>
+              Mark as renewal (resets the 8-session cycle after payment)
+            </span>
+          </label>
 
           <div className="form-row two-col">
             <label>
@@ -180,7 +231,7 @@ export function FeesView({
               className="btn primary"
               disabled={students.length === 0 || saving}
             >
-              {saving ? 'Saving…' : 'Save payment'}
+              {saving ? 'Saving…' : 'Save & download receipt'}
             </button>
           </div>
         </form>
@@ -204,33 +255,52 @@ export function FeesView({
                   </td>
                 </tr>
               ) : (
-                allPayments.map((p) => (
-                  <tr key={p.id}>
-                    <td>{p.date}</td>
-                    <td className="name-cell">{p.studentName}</td>
-                    <td>₹{p.amount.toLocaleString('en-IN')}</td>
-                    <td>{p.note || '—'}</td>
-                    <td className="row-actions">
-                      <button
-                        type="button"
-                        className="btn small danger"
-                        onClick={async () => {
-                          try {
-                            await onDeletePayment(p.studentId, p.id)
-                          } catch (err) {
-                            alert(
-                              err instanceof Error
-                                ? err.message
-                                : 'Could not delete payment.',
-                            )
-                          }
-                        }}
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                allPayments.map((p) => {
+                  const student = students.find((s) => s.id === p.studentId)
+                  return (
+                    <tr key={p.id}>
+                      <td>{p.date}</td>
+                      <td className="name-cell">
+                        {p.studentName}
+                        {p.isRenewal ? (
+                          <span className="pill renewal-pending" style={{ marginLeft: '0.35rem' }}>
+                            Renewal
+                          </span>
+                        ) : null}
+                      </td>
+                      <td>₹{p.amount.toLocaleString('en-IN')}</td>
+                      <td>{p.note || '—'}</td>
+                      <td className="row-actions">
+                        {student ? (
+                          <button
+                            type="button"
+                            className="btn small ghost"
+                            onClick={() => void handleReceipt(student, p.id)}
+                          >
+                            Receipt
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="btn small danger"
+                          onClick={async () => {
+                            try {
+                              await onDeletePayment(p.studentId, p.id)
+                            } catch (err) {
+                              alert(
+                                err instanceof Error
+                                  ? err.message
+                                  : 'Could not delete payment.',
+                              )
+                            }
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })
               )}
             </tbody>
           </table>

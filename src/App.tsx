@@ -4,6 +4,7 @@ import { AttendanceView } from './components/AttendanceView'
 import { FeesView } from './components/FeesView'
 import { LoginScreen } from './components/LoginScreen'
 import { Overview } from './components/Overview'
+import { RenewalView } from './components/RenewalView'
 import { Sidebar } from './components/Sidebar'
 import { StudentsView } from './components/StudentsView'
 import { ToastProvider } from './components/ToastProvider'
@@ -128,6 +129,7 @@ function AuthenticatedApp({
             onGoStudents={() => setView('students')}
             onGoAttendance={() => setView('attendance')}
             onGoFees={() => setView('fees')}
+            onGoRenewal={() => setView('renewal')}
             onDelete={deleteStudent}
           />
         ) : null}
@@ -159,8 +161,20 @@ function AuthenticatedApp({
         {!loading && !error && isAdmin && view === 'fees' ? (
           <FeesView
             students={students}
+            branding={branding}
             onAddPayment={addPayment}
             onDeletePayment={deletePayment}
+          />
+        ) : null}
+
+        {!loading && !error && isAdmin && view === 'renewal' ? (
+          <RenewalView
+            students={students}
+            branding={branding}
+            onRecordRenewal={(id, amount, date, note) =>
+              addPayment(id, amount, date, note, true)
+            }
+            onGoFees={() => setView('fees')}
           />
         ) : null}
 
