@@ -93,6 +93,15 @@ export function useStudents() {
     return updated
   }
 
+  async function deletePackage(studentId: string, cycle: number) {
+    const updated = await request<Student>(
+      `/api/students/${studentId}/packages/${cycle}`,
+      { method: 'DELETE' },
+    )
+    setStudents((prev) => prev.map((s) => (s.id === studentId ? updated : s)))
+    return updated
+  }
+
   async function markAllAttendance(date: string, status: AttendanceStatus) {
     const updated = await request<Student[]>('/api/attendance/bulk', {
       method: 'PUT',
@@ -138,6 +147,7 @@ export function useStudents() {
     markAttendance,
     markAllAttendance,
     moveAttendance,
+    deletePackage,
     addPayment,
     deletePayment,
   }

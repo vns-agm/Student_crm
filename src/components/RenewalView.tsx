@@ -8,9 +8,10 @@ import {
   totalPaid,
 } from '../hooks/useStudents'
 import { BATCH_OPTIONS } from '../types'
-import type { Batch, Student, TenantBranding } from '../types'
+import type { Batch, RenewalRecord, Student, TenantBranding } from '../types'
 import { formatDate, initials, todayISO } from '../utils/format'
 import { downloadPaymentReceipt } from '../utils/receipt'
+import { TrashIcon } from './ClassDetailsModal'
 import { CycleProgress } from './CycleProgress'
 import { useToast } from './ToastProvider'
 
@@ -25,6 +26,7 @@ interface RenewalViewProps {
     numberOfClasses: number,
   ) => Promise<Student>
   onGoFees: () => void
+  onDeletePackage: (studentId: string, cycle: number) => Promise<Student>
 }
 
 type Filter = 'all' | 'due' | 'active' | 'renewed'
@@ -38,6 +40,7 @@ export function RenewalView({
   branding,
   onRecordRenewal,
   onGoFees,
+  onDeletePackage,
 }: RenewalViewProps) {
   const { showToast } = useToast()
   const [filter, setFilter] = useState<Filter>('all')
@@ -50,6 +53,7 @@ export function RenewalView({
   const [date, setDate] = useState(todayISO)
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const dueCount = useMemo(
     () => students.filter((s) => isRenewalPending(s)).length,
@@ -147,6 +151,33 @@ export function RenewalView({
       showToast(err instanceof Error ? err.message : 'Could not record renewal.', 'error')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleDeletePackage(student: Student, renewal: RenewalRecord) {
+    const classes = student.attendance.filter(
+      (a) => a.cycle === renewal.cycleNumber,
+    ).length
+    if (
+      !confirm(
+        `Delete renewal #${renewal.cycleNumber - 1} (package #${renewal.cycleNumber}) for ${student.name}?\n\n` +
+          `• The renewal payment of ₹${renewal.amount.toLocaleString('en-IN')} will be deleted.\n` +
+          `• Its ${classes} attendance record${classes === 1 ? '' : 's'} will move into package #${renewal.cycleNumber - 1}.`,
+      )
+    ) {
+      return
+    }
+    try {
+      setDeletingId(renewal.id)
+      const updated = await onDeletePackage(student.id, renewal.cycleNumber)
+      showToast(
+        `Package #${renewal.cycleNumber} deleted · ${updated.name} renewed ${updated.renewalCount}×`,
+        'success',
+      )
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not delete package.', 'error')
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -394,7 +425,19 @@ export function RenewalView({
                         {r.note ? ` · ${r.note}` : ''}
                       </p>
                     </div>
-                    <strong>₹{r.amount.toLocaleString('en-IN')}</strong>
+                    <span className="timeline-actions">
+                      <strong>₹{r.amount.toLocaleString('en-IN')}</strong>
+                      <button
+                        type="button"
+                        className="btn small icon-btn danger"
+                        disabled={deletingId !== null}
+                        aria-label={`Delete package ${r.cycleNumber}`}
+                        title={`Delete package #${r.cycleNumber}`}
+                        onClick={() => void handleDeletePackage(selected, r)}
+                      >
+                        <TrashIcon />
+                      </button>
+                    </span>
                   </li>
                 ))}
                 <li className="timeline-item">

@@ -820,8 +820,8 @@ app.post('/api/students/:id/payments', requireAuth, requireAdmin, async (req, re
           sql: `INSERT INTO renewals (
                   id, student_id, payment_id, amount, date, note,
                   classes_at_renewal, sessions_in_cycle, cycle_number,
-                  classes_in_package, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                  classes_in_package, previous_classes, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           args: [
             crypto.randomUUID(),
             req.params.id,
@@ -833,6 +833,7 @@ app.post('/api/students/:id/payments', requireAuth, requireAdmin, async (req, re
             sessionsInCycle,
             currentCycle + 1,
             newPackage,
+            cycleLimit(student),
             new Date().toISOString(),
           ],
         },
@@ -853,6 +854,103 @@ app.post('/api/students/:id/payments', requireAuth, requireAdmin, async (req, re
     next(error)
   }
 })
+
+// Removes the package a renewal started and merges its classes into the
+// package before it. Every later package shifts down by one.
+async function removePackageStatements(studentId, renewalId, cycle) {
+  const student = await db.execute({
+    sql: 'SELECT current_cycle FROM students WHERE id = ?',
+    args: [studentId],
+  })
+  const statements = [
+    { sql: 'DELETE FROM renewals WHERE id = ?', args: [renewalId] },
+    {
+      sql: `UPDATE attendance SET cycle_no = cycle_no - 1
+            WHERE student_id = ? AND cycle_no >= ?`,
+      args: [studentId, cycle],
+    },
+    {
+      sql: `UPDATE renewals SET cycle_number = cycle_number - 1
+            WHERE student_id = ? AND cycle_number > ?`,
+      args: [studentId, cycle],
+    },
+    {
+      sql: `UPDATE students SET current_cycle = MAX(1, current_cycle - 1)
+            WHERE id = ?`,
+      args: [studentId],
+    },
+  ]
+
+  // Deleting the current package: restore the size the student had before it.
+  if (cycle === Number(student.rows[0]?.current_cycle)) {
+    const sizes = await db.execute({
+      sql: `SELECT
+              (SELECT previous_classes FROM renewals WHERE id = ?) AS previous,
+              (SELECT classes_in_package FROM renewals
+               WHERE student_id = ? AND cycle_number = ?) AS earlier`,
+      args: [renewalId, studentId, cycle - 1],
+    })
+    const size =
+      Number(sizes.rows[0]?.previous) || Number(sizes.rows[0]?.earlier) || 0
+    if (size >= 1) {
+      statements.push({
+        sql: 'UPDATE students SET number_of_classes = ? WHERE id = ?',
+        args: [size, studentId],
+      })
+    }
+  }
+
+  return statements
+}
+
+app.delete(
+  '/api/students/:id/packages/:cycle',
+  requireAuth,
+  requireAdmin,
+  async (req, res, next) => {
+    try {
+      const student = await getStudentRow(req.params.id, req.user.tenantId)
+      if (!student) {
+        return res.status(404).json({ error: 'Student not found.' })
+      }
+
+      const cycle = Number(req.params.cycle)
+      if (!Number.isInteger(cycle) || cycle < 2) {
+        return res
+          .status(400)
+          .json({ error: 'Package #1 is the enrolment and cannot be deleted.' })
+      }
+
+      const renewal = await db.execute({
+        sql: `SELECT id, payment_id FROM renewals
+              WHERE student_id = ? AND cycle_number = ?`,
+        args: [req.params.id, cycle],
+      })
+      if (!renewal.rows[0]) {
+        return res.status(404).json({ error: 'Package not found.' })
+      }
+
+      const statements = await removePackageStatements(
+        req.params.id,
+        renewal.rows[0].id,
+        cycle,
+      )
+      if (renewal.rows[0].payment_id) {
+        statements.unshift({
+          sql: 'DELETE FROM payments WHERE id = ?',
+          args: [renewal.rows[0].payment_id],
+        })
+      }
+
+      await db.batch(statements, 'write')
+
+      const row = await getStudentRow(req.params.id, req.user.tenantId)
+      res.json(await mapStudent(row))
+    } catch (error) {
+      next(error)
+    }
+  },
+)
 
 app.delete('/api/payments/:id', requireAuth, requireAdmin, async (req, res, next) => {
   try {
@@ -878,25 +976,12 @@ app.delete('/api/payments/:id', requireAuth, requireAdmin, async (req, res, next
     ]
 
     if (renewal.rows[0]) {
-      // Undo the renewal: merge its cycle back into the previous one.
-      const removedCycle = Number(renewal.rows[0].cycle_number)
       statements.push(
-        { sql: 'DELETE FROM renewals WHERE id = ?', args: [renewal.rows[0].id] },
-        {
-          sql: `UPDATE attendance SET cycle_no = cycle_no - 1
-                WHERE student_id = ? AND cycle_no >= ?`,
-          args: [studentId, removedCycle],
-        },
-        {
-          sql: `UPDATE renewals SET cycle_number = cycle_number - 1
-                WHERE student_id = ? AND cycle_number > ?`,
-          args: [studentId, removedCycle],
-        },
-        {
-          sql: `UPDATE students SET current_cycle = MAX(1, current_cycle - 1)
-                WHERE id = ?`,
-          args: [studentId],
-        },
+        ...(await removePackageStatements(
+          studentId,
+          renewal.rows[0].id,
+          Number(renewal.rows[0].cycle_number),
+        )),
       )
     }
 

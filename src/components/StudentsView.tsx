@@ -19,6 +19,7 @@ interface StudentsViewProps {
     recordId: string,
     cycle: number,
   ) => Promise<Student>
+  onDeletePackage: (studentId: string, cycle: number) => Promise<Student>
 }
 
 const emptyForm = {
@@ -46,6 +47,7 @@ export function StudentsView({
   onDelete,
   onGoAdd,
   onMoveAttendance,
+  onDeletePackage,
 }: StudentsViewProps) {
   const [form, setForm] = useState(emptyForm)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -414,6 +416,7 @@ export function StudentsView({
           student={viewing}
           onClose={() => setViewingId(null)}
           onMove={onMoveAttendance}
+          onDeletePackage={onDeletePackage}
         />
       ) : null}
     </section>

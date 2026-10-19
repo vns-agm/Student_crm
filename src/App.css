@@ -1947,3 +1947,40 @@ select:focus {
     opacity: 1;
   }
 }
+
+.package-column-head .package-delete {
+  display: grid;
+  place-items: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  margin-left: auto;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease, border-color 140ms ease;
+}
+
+.package-column-head .package-delete:hover:not(:disabled) {
+  border-color: rgba(180, 35, 24, 0.3);
+  background: rgba(180, 35, 24, 0.08);
+  color: var(--danger);
+}
+
+.package-column-head .package-delete svg {
+  width: 14px;
+  height: 14px;
+}
+
+.package-column.is-deleting {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.timeline-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}

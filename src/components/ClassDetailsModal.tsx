@@ -9,12 +9,14 @@ interface ClassDetailsModalProps {
   student: Student
   onClose: () => void
   onMove?: (studentId: string, recordId: string, cycle: number) => Promise<Student>
+  onDeletePackage?: (studentId: string, cycle: number) => Promise<Student>
 }
 
 export function ClassDetailsModal({
   student,
   onClose,
   onMove,
+  onDeletePackage,
 }: ClassDetailsModalProps) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -73,6 +75,9 @@ export function ClassDetailsModal({
         <PackageBoard
           student={student}
           onMove={onMove ? (id, cycle) => onMove(student.id, id, cycle) : undefined}
+          onDeletePackage={
+            onDeletePackage ? (cycle) => onDeletePackage(student.id, cycle) : undefined
+          }
         />
       </div>
     </div>

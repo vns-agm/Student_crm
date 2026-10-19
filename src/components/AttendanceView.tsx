@@ -26,6 +26,7 @@ interface AttendanceViewProps {
     recordId: string,
     cycle: number,
   ) => Promise<Student>
+  onDeletePackage: (studentId: string, cycle: number) => Promise<Student>
 }
 
 const statuses: { value: AttendanceStatus; label: string }[] = [
@@ -42,6 +43,7 @@ export function AttendanceView({
   onMarkAll,
   onGoRenewal,
   onMoveAttendance,
+  onDeletePackage,
 }: AttendanceViewProps) {
   const [date, setDate] = useState(todayISO)
   const [query, setQuery] = useState('')
@@ -368,6 +370,7 @@ export function AttendanceView({
                       onMove={(recordId, cycle) =>
                         onMoveAttendance(student.id, recordId, cycle)
                       }
+                      onDeletePackage={(cycle) => onDeletePackage(student.id, cycle)}
                     />
                   </div>
                 ) : null}

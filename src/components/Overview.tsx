@@ -29,6 +29,7 @@ interface OverviewProps {
     recordId: string,
     cycle: number,
   ) => Promise<Student>
+  onDeletePackage?: (studentId: string, cycle: number) => Promise<Student>
 }
 
 function batchLabel(batch: Batch) {
@@ -45,6 +46,7 @@ export function Overview({
   onGoRenewal,
   onDelete,
   onMoveAttendance,
+  onDeletePackage,
 }: OverviewProps) {
   const [viewingId, setViewingId] = useState<string | null>(null)
   const viewing = students.find((s) => s.id === viewingId) ?? null
@@ -235,6 +237,7 @@ export function Overview({
           student={viewing}
           onClose={() => setViewingId(null)}
           onMove={onMoveAttendance}
+          onDeletePackage={onDeletePackage}
         />
       ) : null}
     </section>

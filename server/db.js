@@ -242,6 +242,7 @@ export function ensureDb() {
       await ensureColumn('attendance', 'cycle_no', 'INTEGER NOT NULL DEFAULT 1')
       await ensureColumn('renewals', 'cycle_number', 'INTEGER NOT NULL DEFAULT 0')
       await ensureColumn('renewals', 'classes_in_package', 'INTEGER NOT NULL DEFAULT 0')
+      await ensureColumn('renewals', 'previous_classes', 'INTEGER NOT NULL DEFAULT 0')
       if (needsCycleBackfill) {
         await backfillCycles()
       }
