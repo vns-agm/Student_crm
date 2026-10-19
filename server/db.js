@@ -31,11 +31,67 @@ function createDbClient() {
 
 export const db = createDbClient()
 
-async function ensureColumn(table, column, definition) {
+async function hasColumn(table, column) {
   const result = await db.execute(`PRAGMA table_info(${table})`)
-  const exists = result.rows.some((row) => row.name === column)
-  if (!exists) {
+  return result.rows.some((row) => row.name === column)
+}
+
+async function ensureColumn(table, column, definition) {
+  if (!(await hasColumn(table, column))) {
     await db.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+  }
+}
+
+// One-time migration: older databases tracked cycles only through a running
+// count (cycle_start_classes). Tag every attendance row with the package
+// cycle it belongs to so class numbers restart at 1 after each renewal.
+async function backfillCycles() {
+  const students = await db.execute('SELECT id, number_of_classes FROM students')
+  const statements = []
+
+  for (const student of students.rows) {
+    const renewals = await db.execute({
+      sql: `SELECT id, date, classes_at_renewal FROM renewals
+            WHERE student_id = ? ORDER BY created_at ASC`,
+      args: [student.id],
+    })
+    const attendance = await db.execute({
+      sql: 'SELECT id, date, status FROM attendance WHERE student_id = ? ORDER BY date ASC',
+      args: [student.id],
+    })
+
+    let held = 0
+    for (const record of attendance.rows) {
+      const isHeld = record.status === 'present' || record.status === 'late'
+      let cycle = 1
+      for (const r of renewals.rows) {
+        const boundaryPassed = isHeld
+          ? held >= Number(r.classes_at_renewal)
+          : record.date >= r.date
+        if (boundaryPassed) cycle += 1
+      }
+      if (isHeld) held += 1
+      statements.push({
+        sql: 'UPDATE attendance SET cycle_no = ? WHERE id = ?',
+        args: [cycle, record.id],
+      })
+    }
+
+    renewals.rows.forEach((r, index) => {
+      statements.push({
+        sql: `UPDATE renewals SET cycle_number = ?, classes_in_package = ?
+              WHERE id = ?`,
+        args: [index + 2, student.number_of_classes, r.id],
+      })
+    })
+    statements.push({
+      sql: 'UPDATE students SET current_cycle = ? WHERE id = ?',
+      args: [renewals.rows.length + 1, student.id],
+    })
+  }
+
+  if (statements.length > 0) {
+    await db.batch(statements, 'write')
   }
 }
 
@@ -181,6 +237,14 @@ export function ensureDb() {
       await ensureColumn('students', 'tenant_id', 'TEXT')
       await ensureColumn('students', 'cycle_start_classes', 'INTEGER NOT NULL DEFAULT 0')
       await ensureColumn('payments', 'is_renewal', 'INTEGER NOT NULL DEFAULT 0')
+      const needsCycleBackfill = !(await hasColumn('attendance', 'cycle_no'))
+      await ensureColumn('students', 'current_cycle', 'INTEGER NOT NULL DEFAULT 1')
+      await ensureColumn('attendance', 'cycle_no', 'INTEGER NOT NULL DEFAULT 1')
+      await ensureColumn('renewals', 'cycle_number', 'INTEGER NOT NULL DEFAULT 0')
+      await ensureColumn('renewals', 'classes_in_package', 'INTEGER NOT NULL DEFAULT 0')
+      if (needsCycleBackfill) {
+        await backfillCycles()
+      }
       await ensureColumn('users', 'tenant_id', 'TEXT')
       await ensureColumn('users', 'is_owner', 'INTEGER NOT NULL DEFAULT 0')
       await ensureColumn('tournaments', 'tenant_id', 'TEXT')

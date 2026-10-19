@@ -77,6 +77,7 @@ export function useStudents() {
       },
     )
     setStudents((prev) => prev.map((s) => (s.id === studentId ? updated : s)))
+    return updated
   }
 
   async function markAllAttendance(date: string, status: AttendanceStatus) {
@@ -93,12 +94,13 @@ export function useStudents() {
     date: string,
     note: string,
     isRenewal = false,
+    numberOfClasses?: number,
   ) {
     const updated = await request<Student>(
       `/api/students/${studentId}/payments`,
       {
         method: 'POST',
-        body: JSON.stringify({ amount, date, note, isRenewal }),
+        body: JSON.stringify({ amount, date, note, isRenewal, numberOfClasses }),
       },
     )
     setStudents((prev) => prev.map((s) => (s.id === studentId ? updated : s)))
@@ -143,10 +145,21 @@ export function classesHeld(student: Student): number {
 }
 
 export function sessionsInCycle(student: Student): number {
-  if (typeof student.sessionsInCycle === 'number') {
-    return student.sessionsInCycle
-  }
-  return Math.max(0, classesHeld(student) - (student.cycleStartClasses ?? 0))
+  return student.sessionsInCycle ?? 0
+}
+
+export function currentCycle(student: Student): number {
+  return student.currentCycle ?? 1
+}
+
+/** Attendance records belonging to one package cycle, newest first. */
+export function cycleAttendance(student: Student, cycle = currentCycle(student)) {
+  return student.attendance.filter((a) => a.cycle === cycle)
+}
+
+/** Class number the next present/late mark will get in the current cycle. */
+export function nextClassNumber(student: Student): number {
+  return sessionsInCycle(student) + 1
 }
 
 export function cycleLimit(student: Student): number {

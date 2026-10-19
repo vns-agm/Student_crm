@@ -2,7 +2,6 @@ import { useState } from 'react'
 import {
   attendanceRate,
   balanceDue,
-  classesHeld,
   isRenewalPending,
   totalPaid,
 } from '../hooks/useStudents'
@@ -14,6 +13,7 @@ import {
   EyeIcon,
   TrashIcon,
 } from './ClassDetailsModal'
+import { CycleProgress } from './CycleProgress'
 
 interface OverviewProps {
   students: Student[]
@@ -141,7 +141,7 @@ export function Overview({
               <th>Name</th>
               <th>Age</th>
               <th>Batch</th>
-              <th>Classes held</th>
+              <th>Package progress</th>
               <th>Renewal</th>
               <th>Attendance</th>
               <th>Paid</th>
@@ -164,7 +164,9 @@ export function Overview({
                   <td>
                     <span className="pill">{batchLabel(s.batch)}</span>
                   </td>
-                  <td>{classesHeld(s)}</td>
+                  <td>
+                    <CycleProgress student={s} compact />
+                  </td>
                   <td>
                     {isRenewalPending(s) ? (
                       <span className="pill renewal-pending">Pending</span>

@@ -34,6 +34,9 @@ export function exportStudentsToCsv(students: Student[]) {
     'Balance',
     'Attendance %',
     'Classes Held',
+    'Current Package',
+    'Classes This Package',
+    'Times Renewed',
     'Created At',
   ]
 
@@ -58,6 +61,9 @@ export function exportStudentsToCsv(students: Student[]) {
       balanceDue(student),
       attendanceRate(student),
       classesHeld,
+      student.currentCycle,
+      student.sessionsInCycle,
+      student.renewalCount,
       student.createdAt,
     ]
   })

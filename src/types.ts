@@ -20,6 +20,10 @@ export interface AttendanceRecord {
   id: string
   date: string
   status: AttendanceStatus
+  /** Package cycle (1 = first enrolment, 2 = after first renewal, …). */
+  cycle: number
+  /** Class number within its cycle; null for absences. */
+  classNumber: number | null
 }
 
 export interface FeePayment {
@@ -38,6 +42,8 @@ export interface RenewalRecord {
   note: string
   classesAtRenewal: number
   sessionsInCycle: number
+  cycleNumber: number
+  classesInPackage: number
   createdAt: string
 }
 
@@ -58,7 +64,10 @@ export interface Student extends StudentDetailsInput {
   id: string
   totalFees: number
   cycleStartClasses: number
+  currentCycle: number
+  classesHeld: number
   sessionsInCycle: number
+  classesRemaining: number
   renewalPending: boolean
   renewalCount: number
   attendance: AttendanceRecord[]

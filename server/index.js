@@ -20,12 +20,6 @@ function cycleLimit(row) {
   return 8
 }
 
-function countClassesHeld(attendanceRows) {
-  return attendanceRows.filter(
-    (a) => a.status === 'present' || a.status === 'late',
-  ).length
-}
-
 app.use(cors())
 app.use(express.json())
 
@@ -51,12 +45,16 @@ app.use(async (req, res, next) => {
   }
 })
 
+function isHeld(status) {
+  return status === 'present' || status === 'late'
+}
+
 async function mapStudent(row) {
   const attendance = await db.execute({
-    sql: `SELECT id, date, status
+    sql: `SELECT id, date, status, cycle_no
           FROM attendance
           WHERE student_id = ?
-          ORDER BY date DESC`,
+          ORDER BY date ASC`,
     args: [row.id],
   })
 
@@ -69,17 +67,32 @@ async function mapStudent(row) {
   })
 
   const renewals = await db.execute({
-    sql: `SELECT id, payment_id, amount, date, note, classes_at_renewal, sessions_in_cycle, created_at
+    sql: `SELECT id, payment_id, amount, date, note, classes_at_renewal,
+                 sessions_in_cycle, cycle_number, classes_in_package, created_at
           FROM renewals
           WHERE student_id = ?
           ORDER BY created_at DESC`,
     args: [row.id],
   })
 
-  const classesHeld = countClassesHeld(attendance.rows)
-  const cycleStart = row.cycle_start_classes ?? 0
-  const sessionsInCycle = Math.max(0, classesHeld - cycleStart)
+  const currentCycle = Number(row.current_cycle) || 1
   const packageClasses = cycleLimit(row)
+
+  // Class numbers restart at 1 in every package cycle.
+  const heldPerCycle = new Map()
+  const records = attendance.rows.map((a) => {
+    const cycle = Number(a.cycle_no) || 1
+    let classNumber = null
+    if (isHeld(a.status)) {
+      classNumber = (heldPerCycle.get(cycle) ?? 0) + 1
+      heldPerCycle.set(cycle, classNumber)
+    }
+    return { id: a.id, date: a.date, status: a.status, cycle, classNumber }
+  })
+  records.reverse()
+
+  const classesHeld = records.filter((a) => isHeld(a.status)).length
+  const sessionsInCycle = heldPerCycle.get(currentCycle) ?? 0
 
   return {
     id: row.id,
@@ -92,12 +105,15 @@ async function mapStudent(row) {
     category: row.category || 'open',
     totalFees: row.total_fees,
     amountPaid: row.amount_paid ?? 0,
-    cycleStartClasses: cycleStart,
+    cycleStartClasses: classesHeld - sessionsInCycle,
+    currentCycle,
+    classesHeld,
     sessionsInCycle,
+    classesRemaining: Math.max(0, packageClasses - sessionsInCycle),
     renewalPending: sessionsInCycle >= packageClasses,
     renewalCount: renewals.rows.length,
     createdAt: row.created_at,
-    attendance: attendance.rows,
+    attendance: records,
     payments: payments.rows.map((p) => ({
       id: p.id,
       amount: p.amount,
@@ -105,7 +121,7 @@ async function mapStudent(row) {
       note: p.note,
       isRenewal: Boolean(p.is_renewal),
     })),
-    renewals: renewals.rows.map((r) => ({
+    renewals: renewals.rows.map((r, index) => ({
       id: r.id,
       paymentId: r.payment_id,
       amount: r.amount,
@@ -113,6 +129,8 @@ async function mapStudent(row) {
       note: r.note,
       classesAtRenewal: r.classes_at_renewal,
       sessionsInCycle: r.sessions_in_cycle,
+      cycleNumber: Number(r.cycle_number) || renewals.rows.length - index + 1,
+      classesInPackage: Number(r.classes_in_package) || packageClasses,
       createdAt: r.created_at,
     })),
   }
@@ -630,9 +648,15 @@ app.put('/api/students/:id/attendance', requireAuth, requireAdmin, async (req, r
       })
     } else {
       await db.execute({
-        sql: `INSERT INTO attendance (id, student_id, date, status)
-              VALUES (?, ?, ?, ?)`,
-        args: [crypto.randomUUID(), req.params.id, date, status],
+        sql: `INSERT INTO attendance (id, student_id, date, status, cycle_no)
+              VALUES (?, ?, ?, ?, ?)`,
+        args: [
+          crypto.randomUUID(),
+          req.params.id,
+          date,
+          status,
+          Number(student.current_cycle) || 1,
+        ],
       })
     }
 
@@ -658,7 +682,7 @@ app.put('/api/attendance/bulk', requireAuth, requireAdmin, async (req, res, next
     }
 
     const students = await db.execute({
-      sql: 'SELECT id FROM students WHERE tenant_id = ?',
+      sql: 'SELECT id, current_cycle FROM students WHERE tenant_id = ?',
       args: [req.user.tenantId],
     })
     const statements = []
@@ -676,9 +700,15 @@ app.put('/api/attendance/bulk', requireAuth, requireAdmin, async (req, res, next
         })
       } else {
         statements.push({
-          sql: `INSERT INTO attendance (id, student_id, date, status)
-                VALUES (?, ?, ?, ?)`,
-          args: [crypto.randomUUID(), student.id, date, status],
+          sql: `INSERT INTO attendance (id, student_id, date, status, cycle_no)
+                VALUES (?, ?, ?, ?, ?)`,
+          args: [
+            crypto.randomUUID(),
+            student.id,
+            date,
+            status,
+            Number(student.current_cycle) || 1,
+          ],
         })
       }
     }
@@ -717,44 +747,68 @@ app.post('/api/students/:id/payments', requireAuth, requireAdmin, async (req, re
       return res.status(400).json({ error: 'Valid date is required (YYYY-MM-DD).' })
     }
 
+    const newPackage =
+      req.body?.numberOfClasses == null || req.body.numberOfClasses === ''
+        ? cycleLimit(student)
+        : Number(req.body.numberOfClasses)
+    if (isRenewal && (!Number.isInteger(newPackage) || newPackage < 1)) {
+      return res
+        .status(400)
+        .json({ error: 'Enter a valid number of classes for the new package.' })
+    }
+
     const attendance = await db.execute({
-      sql: `SELECT status FROM attendance WHERE student_id = ?`,
+      sql: 'SELECT status, cycle_no FROM attendance WHERE student_id = ?',
       args: [req.params.id],
     })
-    const classesHeld = countClassesHeld(attendance.rows)
-    const cycleStart = student.cycle_start_classes ?? 0
-    const sessionsInCycle = Math.max(0, classesHeld - cycleStart)
+    const currentCycle = Number(student.current_cycle) || 1
+    const classesHeld = attendance.rows.filter((a) => isHeld(a.status)).length
+    const sessionsInCycle = attendance.rows.filter(
+      (a) => isHeld(a.status) && (Number(a.cycle_no) || 1) === currentCycle,
+    ).length
 
     const paymentId = crypto.randomUUID()
-    await db.execute({
-      sql: `INSERT INTO payments (id, student_id, amount, date, note, is_renewal)
-            VALUES (?, ?, ?, ?, ?, ?)`,
-      args: [paymentId, req.params.id, amount, date, note, isRenewal ? 1 : 0],
-    })
+    const statements = [
+      {
+        sql: `INSERT INTO payments (id, student_id, amount, date, note, is_renewal)
+              VALUES (?, ?, ?, ?, ?, ?)`,
+        args: [paymentId, req.params.id, amount, date, note, isRenewal ? 1 : 0],
+      },
+    ]
 
     if (isRenewal) {
-      await db.execute({
-        sql: `INSERT INTO renewals (
-                id, student_id, payment_id, amount, date, note,
-                classes_at_renewal, sessions_in_cycle, created_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        args: [
-          crypto.randomUUID(),
-          req.params.id,
-          paymentId,
-          amount,
-          date,
-          note,
-          classesHeld,
-          sessionsInCycle,
-          new Date().toISOString(),
-        ],
-      })
-      await db.execute({
-        sql: 'UPDATE students SET cycle_start_classes = ? WHERE id = ?',
-        args: [classesHeld, req.params.id],
-      })
+      // A renewal opens a new package cycle: class count restarts at 1.
+      statements.push(
+        {
+          sql: `INSERT INTO renewals (
+                  id, student_id, payment_id, amount, date, note,
+                  classes_at_renewal, sessions_in_cycle, cycle_number,
+                  classes_in_package, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          args: [
+            crypto.randomUUID(),
+            req.params.id,
+            paymentId,
+            amount,
+            date,
+            note,
+            classesHeld,
+            sessionsInCycle,
+            currentCycle + 1,
+            newPackage,
+            new Date().toISOString(),
+          ],
+        },
+        {
+          sql: `UPDATE students
+                SET current_cycle = ?, cycle_start_classes = ?, number_of_classes = ?
+                WHERE id = ?`,
+          args: [currentCycle + 1, classesHeld, newPackage, req.params.id],
+        },
+      )
     }
+
+    await db.batch(statements, 'write')
 
     const row = await getStudentRow(req.params.id, req.user.tenantId)
     res.status(201).json(await mapStudent(row))
@@ -777,12 +831,41 @@ app.delete('/api/payments/:id', requireAuth, requireAdmin, async (req, res, next
       return res.status(404).json({ error: 'Payment not found.' })
     }
 
-    await db.execute({
-      sql: 'DELETE FROM payments WHERE id = ?',
+    const studentId = payment.rows[0].student_id
+    const renewal = await db.execute({
+      sql: 'SELECT id, cycle_number FROM renewals WHERE payment_id = ?',
       args: [req.params.id],
     })
+    const statements = [
+      { sql: 'DELETE FROM payments WHERE id = ?', args: [req.params.id] },
+    ]
 
-    const row = await getStudentRow(payment.rows[0].student_id, req.user.tenantId)
+    if (renewal.rows[0]) {
+      // Undo the renewal: merge its cycle back into the previous one.
+      const removedCycle = Number(renewal.rows[0].cycle_number)
+      statements.push(
+        { sql: 'DELETE FROM renewals WHERE id = ?', args: [renewal.rows[0].id] },
+        {
+          sql: `UPDATE attendance SET cycle_no = cycle_no - 1
+                WHERE student_id = ? AND cycle_no >= ?`,
+          args: [studentId, removedCycle],
+        },
+        {
+          sql: `UPDATE renewals SET cycle_number = cycle_number - 1
+                WHERE student_id = ? AND cycle_number > ?`,
+          args: [studentId, removedCycle],
+        },
+        {
+          sql: `UPDATE students SET current_cycle = MAX(1, current_cycle - 1)
+                WHERE id = ?`,
+          args: [studentId],
+        },
+      )
+    }
+
+    await db.batch(statements, 'write')
+
+    const row = await getStudentRow(studentId, req.user.tenantId)
     res.json(await mapStudent(row))
   } catch (error) {
     next(error)

@@ -1219,3 +1219,547 @@ select:focus {
     font-size: clamp(1.9rem, 7vw, 2.4rem);
   }
 }
+
+/* ---------- Package progress, attendance & renewal ---------- */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.cycle-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 150px;
+  margin-bottom: 0.9rem;
+}
+
+.cycle-progress.is-compact {
+  margin-bottom: 0;
+  min-width: 120px;
+}
+
+.cycle-progress-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+}
+
+.cycle-progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  overflow: hidden;
+}
+
+.cycle-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--brand-mid), var(--brand));
+  transition: width 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.cycle-progress.is-near .cycle-progress-track span {
+  background: linear-gradient(90deg, #d4a73c, var(--accent));
+}
+
+.cycle-progress.is-complete .cycle-progress-track span {
+  background: linear-gradient(90deg, #d0612f, var(--danger));
+}
+
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--brand-mid), var(--brand));
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.avatar-lg {
+  width: 3rem;
+  height: 3rem;
+  font-size: 1rem;
+}
+
+.date-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.date-nav input {
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.att-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.att-summary-item {
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-strong);
+}
+
+.att-summary-item span {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.att-summary-item strong {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 1.6rem;
+}
+
+.att-summary-item.status-present strong {
+  color: var(--present);
+}
+
+.att-summary-item.status-late strong {
+  color: var(--late);
+}
+
+.att-summary-item.status-absent strong {
+  color: var(--absent);
+}
+
+.att-summary-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--brand-soft);
+  gap: 2px;
+}
+
+.att-summary-bar .seg {
+  transition: flex-grow 300ms ease;
+}
+
+.att-summary-bar .status-present {
+  background: var(--present);
+}
+
+.att-summary-bar .status-late {
+  background: var(--late);
+}
+
+.att-summary-bar .status-absent {
+  background: var(--absent);
+}
+
+.att-summary-bar .seg-empty {
+  background: transparent;
+}
+
+.att-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.att-toolbar .search {
+  flex: 1 1 220px;
+  margin: 0;
+}
+
+.att-toolbar select {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.att-toolbar .bulk-actions {
+  margin: 0;
+}
+
+.chip-tabs {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.chip-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.38rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.chip-tab:hover {
+  border-color: var(--brand-mid);
+  color: var(--brand);
+}
+
+.chip-tab.is-active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+.chip-count {
+  min-width: 1.4rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: rgba(20, 36, 28, 0.08);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.chip-tab.is-active .chip-count {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.att-card {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.att-card.is-due {
+  border-left: 4px solid var(--accent);
+}
+
+.att-card.is-busy {
+  opacity: 0.65;
+}
+
+.att-main {
+  display: grid;
+  grid-template-columns: minmax(200px, 1.3fr) minmax(180px, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+}
+
+.att-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.att-identity .name-cell {
+  display: block;
+}
+
+.att-identity:hover .name-cell {
+  color: var(--brand-mid);
+  text-decoration: underline;
+}
+
+.att-meta {
+  display: block;
+}
+
+.att-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.att-progress .cycle-progress {
+  flex: 1;
+}
+
+.class-badge {
+  flex: none;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.class-badge.is-next {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.class-badge.is-due {
+  background: var(--accent-soft);
+  color: #7a5a14;
+  cursor: pointer;
+}
+
+.status-btn:disabled {
+  cursor: wait;
+}
+
+.att-history {
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed var(--line);
+  animation: rise 200ms ease;
+}
+
+.history-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.history-chips .status-chip button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.history-chips .status-chip.is-current {
+  outline: 2px solid currentColor;
+}
+
+.renewal-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.renewal-list-card .search {
+  width: 100%;
+  margin-bottom: 0.75rem;
+}
+
+.renewal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 560px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.renewal-item {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.renewal-item:hover {
+  background: var(--surface);
+}
+
+.renewal-item.is-selected {
+  background: var(--brand-soft);
+  border-color: rgba(26, 77, 62, 0.3);
+}
+
+.renewal-item.is-due .avatar {
+  background: linear-gradient(135deg, #d4a73c, var(--accent));
+}
+
+.renewal-item-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.renewal-item-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.renew-count {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.renewal-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.renewal-detail .form-card {
+  margin-bottom: 0;
+}
+
+.renewal-detail .fee-summary {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.renewal-head {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.renewal-head h2 {
+  margin: 0;
+}
+
+.renewal-head .pill {
+  margin-left: auto;
+}
+
+.renewal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.renewal-form .link-btn {
+  align-self: flex-start;
+  font-size: 0.85rem;
+}
+
+.timeline {
+  position: relative;
+  margin: 0;
+  padding: 0 0 0 1.2rem;
+  list-style: none;
+}
+
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 0.38rem;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  width: 2px;
+  background: var(--line);
+}
+
+.timeline-item {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.55rem 0;
+}
+
+.timeline-item p {
+  margin: 0;
+}
+
+.timeline-dot {
+  position: absolute;
+  left: -1.2rem;
+  top: 0.85rem;
+  width: 0.8rem;
+  height: 0.8rem;
+  border: 2px solid var(--brand-mid);
+  border-radius: 50%;
+  background: var(--surface-strong);
+}
+
+.timeline-item.is-current .timeline-dot {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.stat-btn {
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.stat-btn.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow);
+}
+
+.cycle-block {
+  margin-top: 1rem;
+}
+
+.cycle-block .modal-subtitle .muted {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-weight: 500;
+}
+
+.class-no {
+  display: inline-block;
+  min-width: 4.6rem;
+  margin-right: 0.5rem;
+  color: var(--brand);
+  font-weight: 700;
+}
+
+@media (max-width: 1100px) {
+  .renewal-layout,
+  .att-main {
+    grid-template-columns: 1fr;
+  }
+
+  .renewal-detail .fee-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .att-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .date-nav {
+    flex-wrap: wrap;
+  }
+}

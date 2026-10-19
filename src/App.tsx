@@ -155,6 +155,7 @@ function AuthenticatedApp({
             students={students}
             onMark={markAttendance}
             onMarkAll={markAllAttendance}
+            onGoRenewal={() => setView('renewal')}
           />
         ) : null}
 
@@ -171,8 +172,8 @@ function AuthenticatedApp({
           <RenewalView
             students={students}
             branding={branding}
-            onRecordRenewal={(id, amount, date, note) =>
-              addPayment(id, amount, date, note, true)
+            onRecordRenewal={(id, amount, date, note, numberOfClasses) =>
+              addPayment(id, amount, date, note, true, numberOfClasses)
             }
             onGoFees={() => setView('fees')}
           />

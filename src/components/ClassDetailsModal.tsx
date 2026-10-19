@@ -1,18 +1,13 @@
+import { useEffect } from 'react'
+import { cycleLimit, renewalCount } from '../hooks/useStudents'
 import { BATCH_OPTIONS } from '../types'
 import type { Student } from '../types'
+import { formatDate } from '../utils/format'
+import { CycleProgress } from './CycleProgress'
 
 interface ClassDetailsModalProps {
   student: Student
   onClose: () => void
-}
-
-function formatDate(date: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return date
-  return new Date(`${date}T00:00:00`).toLocaleDateString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  })
 }
 
 function statusLabel(status: string) {
@@ -20,15 +15,34 @@ function statusLabel(status: string) {
 }
 
 export function ClassDetailsModal({ student, onClose }: ClassDetailsModalProps) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   const batchLabel =
     BATCH_OPTIONS.find((o) => o.value === student.batch)?.label ?? student.batch
 
-  const heldClasses = [...student.attendance].sort((a, b) =>
+  // Group records by package cycle, newest package first, classes in date order.
+  const cycles = new Map<number, Student['attendance']>()
+  for (const record of [...student.attendance].sort((a, b) =>
     a.date.localeCompare(b.date),
-  )
-  const heldCount = heldClasses.filter(
-    (a) => a.status === 'present' || a.status === 'late',
-  ).length
+  )) {
+    const list = cycles.get(record.cycle) ?? []
+    list.push(record)
+    cycles.set(record.cycle, list)
+  }
+  const cycleNumbers = Array.from(
+    new Set([student.currentCycle, ...cycles.keys()]),
+  ).sort((a, b) => b - a)
+
+  function packageSize(cycle: number) {
+    if (cycle === student.currentCycle) return cycleLimit(student)
+    return student.renewals.find((r) => r.cycleNumber === cycle)?.classesInPackage ?? null
+  }
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
@@ -58,34 +72,58 @@ export function ClassDetailsModal({ student, onClose }: ClassDetailsModalProps) 
 
         <div className="modal-stats">
           <div>
-            <span className="muted">Number of classes</span>
-            <strong>{student.numberOfClasses}</strong>
+            <span className="muted">Current package</span>
+            <strong>#{student.currentCycle}</strong>
           </div>
           <div>
-            <span className="muted">Classes held</span>
-            <strong>{heldCount}</strong>
+            <span className="muted">Times renewed</span>
+            <strong>{renewalCount(student)}</strong>
           </div>
           <div>
-            <span className="muted">Records</span>
-            <strong>{heldClasses.length}</strong>
+            <span className="muted">Attended (all time)</span>
+            <strong>{student.classesHeld}</strong>
           </div>
         </div>
 
-        <h3 className="modal-subtitle">Class held dates</h3>
-        {heldClasses.length === 0 ? (
-          <p className="muted">No class dates recorded yet for this student.</p>
-        ) : (
-          <ul className="class-date-list">
-            {heldClasses.map((record) => (
-              <li key={record.id}>
-                <span>{formatDate(record.date)}</span>
-                <span className={`status-chip status-${record.status}`}>
-                  {statusLabel(record.status)}
+        <CycleProgress student={student} />
+
+        {cycleNumbers.map((cycle) => {
+          const records = cycles.get(cycle) ?? []
+          const size = packageSize(cycle)
+          const attended = records.filter((r) => r.classNumber).length
+          return (
+            <section key={cycle} className="cycle-block">
+              <h3 className="modal-subtitle">
+                Package #{cycle}
+                {cycle === student.currentCycle ? ' · current' : ''}
+                <span className="muted compact">
+                  {' '}
+                  {attended}
+                  {size ? `/${size}` : ''} classes
                 </span>
-              </li>
-            ))}
-          </ul>
-        )}
+              </h3>
+              {records.length === 0 ? (
+                <p className="muted">No classes recorded yet.</p>
+              ) : (
+                <ul className="class-date-list">
+                  {records.map((record) => (
+                    <li key={record.id}>
+                      <span>
+                        <span className="class-no">
+                          {record.classNumber ? `Class ${record.classNumber}` : '—'}
+                        </span>
+                        {formatDate(record.date)}
+                      </span>
+                      <span className={`status-chip status-${record.status}`}>
+                        {statusLabel(record.status)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )
+        })}
       </div>
     </div>
   )
