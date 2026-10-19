@@ -24,6 +24,11 @@ interface OverviewProps {
   onGoFees: () => void
   onGoRenewal: () => void
   onDelete: (id: string) => Promise<unknown>
+  onMoveAttendance?: (
+    studentId: string,
+    recordId: string,
+    cycle: number,
+  ) => Promise<Student>
 }
 
 function batchLabel(batch: Batch) {
@@ -39,8 +44,10 @@ export function Overview({
   onGoFees,
   onGoRenewal,
   onDelete,
+  onMoveAttendance,
 }: OverviewProps) {
-  const [viewing, setViewing] = useState<Student | null>(null)
+  const [viewingId, setViewingId] = useState<string | null>(null)
+  const viewing = students.find((s) => s.id === viewingId) ?? null
   const renewalPendingCount = students.filter((s) => isRenewalPending(s)).length
   const totalFeesCollected = students.reduce((sum, s) => sum + totalPaid(s), 0)
   const totalOutstanding = students.reduce((sum, s) => sum + balanceDue(s), 0)
@@ -189,7 +196,7 @@ export function Overview({
                       className="btn small icon-btn"
                       aria-label={`View class details for ${s.name}`}
                       title="View class details"
-                      onClick={() => setViewing(s)}
+                      onClick={() => setViewingId(s.id)}
                     >
                       <EyeIcon />
                     </button>
@@ -224,7 +231,11 @@ export function Overview({
       </div>
 
       {viewing ? (
-        <ClassDetailsModal student={viewing} onClose={() => setViewing(null)} />
+        <ClassDetailsModal
+          student={viewing}
+          onClose={() => setViewingId(null)}
+          onMove={onMoveAttendance}
+        />
       ) : null}
     </section>
   )

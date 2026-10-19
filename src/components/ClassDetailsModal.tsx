@@ -1,20 +1,21 @@
 import { useEffect } from 'react'
-import { cycleLimit, renewalCount } from '../hooks/useStudents'
+import { renewalCount } from '../hooks/useStudents'
 import { BATCH_OPTIONS } from '../types'
 import type { Student } from '../types'
-import { formatDate } from '../utils/format'
 import { CycleProgress } from './CycleProgress'
+import { PackageBoard } from './PackageBoard'
 
 interface ClassDetailsModalProps {
   student: Student
   onClose: () => void
+  onMove?: (studentId: string, recordId: string, cycle: number) => Promise<Student>
 }
 
-function statusLabel(status: string) {
-  return status.charAt(0).toUpperCase() + status.slice(1)
-}
-
-export function ClassDetailsModal({ student, onClose }: ClassDetailsModalProps) {
+export function ClassDetailsModal({
+  student,
+  onClose,
+  onMove,
+}: ClassDetailsModalProps) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose()
@@ -25,24 +26,6 @@ export function ClassDetailsModal({ student, onClose }: ClassDetailsModalProps) 
 
   const batchLabel =
     BATCH_OPTIONS.find((o) => o.value === student.batch)?.label ?? student.batch
-
-  // Group records by package cycle, newest package first, classes in date order.
-  const cycles = new Map<number, Student['attendance']>()
-  for (const record of [...student.attendance].sort((a, b) =>
-    a.date.localeCompare(b.date),
-  )) {
-    const list = cycles.get(record.cycle) ?? []
-    list.push(record)
-    cycles.set(record.cycle, list)
-  }
-  const cycleNumbers = Array.from(
-    new Set([student.currentCycle, ...cycles.keys()]),
-  ).sort((a, b) => b - a)
-
-  function packageSize(cycle: number) {
-    if (cycle === student.currentCycle) return cycleLimit(student)
-    return student.renewals.find((r) => r.cycleNumber === cycle)?.classesInPackage ?? null
-  }
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
@@ -87,43 +70,10 @@ export function ClassDetailsModal({ student, onClose }: ClassDetailsModalProps) 
 
         <CycleProgress student={student} />
 
-        {cycleNumbers.map((cycle) => {
-          const records = cycles.get(cycle) ?? []
-          const size = packageSize(cycle)
-          const attended = records.filter((r) => r.classNumber).length
-          return (
-            <section key={cycle} className="cycle-block">
-              <h3 className="modal-subtitle">
-                Package #{cycle}
-                {cycle === student.currentCycle ? ' · current' : ''}
-                <span className="muted compact">
-                  {' '}
-                  {attended}
-                  {size ? `/${size}` : ''} classes
-                </span>
-              </h3>
-              {records.length === 0 ? (
-                <p className="muted">No classes recorded yet.</p>
-              ) : (
-                <ul className="class-date-list">
-                  {records.map((record) => (
-                    <li key={record.id}>
-                      <span>
-                        <span className="class-no">
-                          {record.classNumber ? `Class ${record.classNumber}` : '—'}
-                        </span>
-                        {formatDate(record.date)}
-                      </span>
-                      <span className={`status-chip status-${record.status}`}>
-                        {statusLabel(record.status)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-          )
-        })}
+        <PackageBoard
+          student={student}
+          onMove={onMove ? (id, cycle) => onMove(student.id, id, cycle) : undefined}
+        />
       </div>
     </div>
   )

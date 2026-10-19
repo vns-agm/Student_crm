@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
 import {
-  cycleAttendance,
   cycleLimit,
   isRenewalPending,
   nextClassNumber,
@@ -10,6 +9,7 @@ import { BATCH_OPTIONS } from '../types'
 import type { AttendanceStatus, Batch, Student } from '../types'
 import { formatDate, initials, shiftDate, todayISO } from '../utils/format'
 import { CycleProgress } from './CycleProgress'
+import { PackageBoard } from './PackageBoard'
 import { useToast } from './ToastProvider'
 
 interface AttendanceViewProps {
@@ -21,6 +21,11 @@ interface AttendanceViewProps {
   ) => Promise<Student>
   onMarkAll: (date: string, status: AttendanceStatus) => Promise<unknown>
   onGoRenewal: () => void
+  onMoveAttendance: (
+    studentId: string,
+    recordId: string,
+    cycle: number,
+  ) => Promise<Student>
 }
 
 const statuses: { value: AttendanceStatus; label: string }[] = [
@@ -31,15 +36,12 @@ const statuses: { value: AttendanceStatus; label: string }[] = [
 
 type Filter = 'all' | 'unmarked' | 'present' | 'absent' | 'due'
 
-function statusLabel(status: string) {
-  return status.charAt(0).toUpperCase() + status.slice(1)
-}
-
 export function AttendanceView({
   students,
   onMark,
   onMarkAll,
   onGoRenewal,
+  onMoveAttendance,
 }: AttendanceViewProps) {
   const [date, setDate] = useState(todayISO)
   const [query, setQuery] = useState('')
@@ -284,7 +286,6 @@ export function AttendanceView({
             const current = record?.status ?? null
             const due = isRenewalPending(student)
             const expanded = expandedId === student.id
-            const history = cycleAttendance(student)
             const renewed = renewalCount(student)
             const busy = busyId === student.id
 
@@ -299,7 +300,7 @@ export function AttendanceView({
                     className="att-identity"
                     onClick={() => setExpandedId(expanded ? null : student.id)}
                     aria-expanded={expanded}
-                    title="Show classes in this package"
+                    title="Show classes by package"
                   >
                     <span className="avatar" aria-hidden="true">
                       {initials(student.name)}
@@ -360,28 +361,14 @@ export function AttendanceView({
 
                 {expanded ? (
                   <div className="att-history">
-                    <p className="muted compact">
-                      Package #{student.currentCycle} · {history.length} record
-                      {history.length === 1 ? '' : 's'}
-                    </p>
-                    {history.length === 0 ? (
-                      <p className="muted">No classes marked in this package yet.</p>
-                    ) : (
-                      <ul className="history-chips">
-                        {[...history].reverse().map((a) => (
-                          <li
-                            key={a.id}
-                            className={`status-chip status-${a.status}${a.date === date ? ' is-current' : ''}`}
-                          >
-                            <button type="button" onClick={() => setDate(a.date)}>
-                              {a.classNumber ? `#${a.classNumber} · ` : ''}
-                              {formatDate(a.date)}
-                              <span className="sr-only"> {statusLabel(a.status)}</span>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                    <PackageBoard
+                      student={student}
+                      highlightDate={date}
+                      onSelectDate={setDate}
+                      onMove={(recordId, cycle) =>
+                        onMoveAttendance(student.id, recordId, cycle)
+                      }
+                    />
                   </div>
                 ) : null}
               </article>

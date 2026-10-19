@@ -80,6 +80,19 @@ export function useStudents() {
     return updated
   }
 
+  async function moveAttendance(
+    studentId: string,
+    recordId: string,
+    cycle: number,
+  ) {
+    const updated = await request<Student>(`/api/attendance/${recordId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ cycle }),
+    })
+    setStudents((prev) => prev.map((s) => (s.id === studentId ? updated : s)))
+    return updated
+  }
+
   async function markAllAttendance(date: string, status: AttendanceStatus) {
     const updated = await request<Student[]>('/api/attendance/bulk', {
       method: 'PUT',
@@ -124,6 +137,7 @@ export function useStudents() {
     deleteStudent,
     markAttendance,
     markAllAttendance,
+    moveAttendance,
     addPayment,
     deletePayment,
   }

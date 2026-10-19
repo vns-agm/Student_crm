@@ -37,6 +37,7 @@ function AuthenticatedApp({
     deleteStudent,
     markAttendance,
     markAllAttendance,
+    moveAttendance,
     addPayment,
     deletePayment,
   } = useStudents()
@@ -131,6 +132,7 @@ function AuthenticatedApp({
             onGoFees={() => setView('fees')}
             onGoRenewal={() => setView('renewal')}
             onDelete={deleteStudent}
+            onMoveAttendance={isAdmin ? moveAttendance : undefined}
           />
         ) : null}
 
@@ -147,6 +149,7 @@ function AuthenticatedApp({
             onUpdate={updateStudent}
             onDelete={deleteStudent}
             onGoAdd={() => setView('add-student')}
+            onMoveAttendance={moveAttendance}
           />
         ) : null}
 
@@ -156,6 +159,7 @@ function AuthenticatedApp({
             onMark={markAttendance}
             onMarkAll={markAllAttendance}
             onGoRenewal={() => setView('renewal')}
+            onMoveAttendance={moveAttendance}
           />
         ) : null}
 

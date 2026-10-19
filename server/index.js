@@ -128,7 +128,11 @@ async function mapStudent(row) {
       date: r.date,
       note: r.note,
       classesAtRenewal: r.classes_at_renewal,
-      sessionsInCycle: r.sessions_in_cycle,
+      // Live count, so moving classes between packages is reflected here.
+      sessionsInCycle:
+        heldPerCycle.get(
+          (Number(r.cycle_number) || renewals.rows.length - index + 1) - 1,
+        ) ?? 0,
       cycleNumber: Number(r.cycle_number) || renewals.rows.length - index + 1,
       classesInPackage: Number(r.classes_in_package) || packageClasses,
       createdAt: r.created_at,
@@ -723,6 +727,39 @@ app.put('/api/attendance/bulk', requireAuth, requireAdmin, async (req, res, next
     })
     const mapped = await Promise.all(result.rows.map((row) => mapStudent(row)))
     res.json(mapped)
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.patch('/api/attendance/:id', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const record = await db.execute({
+      sql: `SELECT a.student_id, s.current_cycle
+            FROM attendance a
+            JOIN students s ON s.id = a.student_id
+            WHERE a.id = ? AND s.tenant_id = ?`,
+      args: [req.params.id, req.user.tenantId],
+    })
+    if (!record.rows[0]) {
+      return res.status(404).json({ error: 'Attendance record not found.' })
+    }
+
+    const cycle = Number(req.body?.cycle)
+    const maxCycle = Number(record.rows[0].current_cycle) || 1
+    if (!Number.isInteger(cycle) || cycle < 1 || cycle > maxCycle) {
+      return res
+        .status(400)
+        .json({ error: `Package must be between 1 and ${maxCycle}.` })
+    }
+
+    await db.execute({
+      sql: 'UPDATE attendance SET cycle_no = ? WHERE id = ?',
+      args: [cycle, req.params.id],
+    })
+
+    const row = await getStudentRow(record.rows[0].student_id, req.user.tenantId)
+    res.json(await mapStudent(row))
   } catch (error) {
     next(error)
   }

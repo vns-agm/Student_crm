@@ -14,6 +14,11 @@ interface StudentsViewProps {
   onUpdate: (id: string, details: StudentDetailsInput) => Promise<unknown>
   onDelete: (id: string) => Promise<unknown>
   onGoAdd: () => void
+  onMoveAttendance: (
+    studentId: string,
+    recordId: string,
+    cycle: number,
+  ) => Promise<Student>
 }
 
 const emptyForm = {
@@ -40,10 +45,12 @@ export function StudentsView({
   onUpdate,
   onDelete,
   onGoAdd,
+  onMoveAttendance,
 }: StudentsViewProps) {
   const [form, setForm] = useState(emptyForm)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [viewing, setViewing] = useState<Student | null>(null)
+  const [viewingId, setViewingId] = useState<string | null>(null)
+  const viewing = students.find((s) => s.id === viewingId) ?? null
   const [query, setQuery] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -361,7 +368,7 @@ export function StudentsView({
                       className="btn small icon-btn"
                       aria-label={`View class details for ${s.name}`}
                       title="View class details"
-                      onClick={() => setViewing(s)}
+                      onClick={() => setViewingId(s.id)}
                     >
                       <EyeIcon />
                     </button>
@@ -381,7 +388,7 @@ export function StudentsView({
                         if (!confirm(`Remove ${s.name}?`)) return
                         try {
                           await onDelete(s.id)
-                          if (viewing?.id === s.id) setViewing(null)
+                          if (viewing?.id === s.id) setViewingId(null)
                           if (editingId === s.id) resetForm()
                         } catch (err) {
                           alert(
@@ -403,7 +410,11 @@ export function StudentsView({
       </div>
 
       {viewing ? (
-        <ClassDetailsModal student={viewing} onClose={() => setViewing(null)} />
+        <ClassDetailsModal
+          student={viewing}
+          onClose={() => setViewingId(null)}
+          onMove={onMoveAttendance}
+        />
       ) : null}
     </section>
   )

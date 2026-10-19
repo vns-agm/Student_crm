@@ -1763,3 +1763,187 @@ select:focus {
     flex-wrap: wrap;
   }
 }
+
+/* ---------- Package board (drag classes between packages) ---------- */
+
+.package-board {
+  margin-top: 0.5rem;
+}
+
+.package-board-hint {
+  margin: 0 0 0.6rem;
+}
+
+.package-columns {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(220px, 1fr);
+  gap: 0.75rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+
+.package-column {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 120px;
+  padding: 0.7rem;
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+}
+
+.package-column.is-current {
+  border-style: solid;
+  border-color: rgba(26, 77, 62, 0.3);
+}
+
+.package-column.is-drop-target {
+  border: 2px dashed var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 4px rgba(184, 137, 44, 0.15);
+}
+
+.package-column-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.package-empty {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  margin: 0;
+  border-radius: 10px;
+  text-align: center;
+}
+
+.package-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.package-item {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--present);
+  border-radius: 10px;
+  background: #fff;
+  transition: transform 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
+}
+
+.package-item[draggable='true'] {
+  cursor: grab;
+}
+
+.package-item[draggable='true']:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(20, 36, 28, 0.1);
+}
+
+.package-item.status-late {
+  border-left-color: var(--late);
+}
+
+.package-item.status-absent {
+  border-left-color: var(--absent);
+}
+
+.package-item.is-current {
+  outline: 2px solid var(--brand-mid);
+  outline-offset: 1px;
+}
+
+.package-item.is-dragging {
+  opacity: 0.4;
+}
+
+.package-item.is-moving {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.drag-handle {
+  color: var(--muted);
+  font-size: 0.8rem;
+  letter-spacing: -2px;
+}
+
+.package-item-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: inherit;
+}
+
+.package-item-body:not(:disabled):hover .class-no {
+  text-decoration: underline;
+}
+
+.package-item .class-no {
+  min-width: 0;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.package-item .status-chip {
+  padding: 0.1rem 0.4rem;
+}
+
+.move-arrows {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.package-item:hover .move-arrows,
+.package-item:focus-within .move-arrows {
+  opacity: 1;
+}
+
+.move-arrows button {
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-strong);
+  color: var(--brand);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.move-arrows button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.modal-card:has(.package-board) {
+  width: min(760px, 100%);
+  max-height: min(88vh, 760px);
+}
+
+@media (hover: none) {
+  .move-arrows {
+    opacity: 1;
+  }
+}
