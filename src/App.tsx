@@ -17,6 +17,17 @@ import { useWhiteLabel } from './hooks/useWhiteLabel'
 import type { AuthUser, View } from './types'
 import './App.css'
 
+const SIDEBAR_KEY = 'agm-chess-sidebar-collapsed'
+const DRAWER_QUERY = '(max-width: 860px)'
+
+function readSidebarCollapsed() {
+  try {
+    return localStorage.getItem(SIDEBAR_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 function AuthenticatedApp({
   user,
   onLogout,
@@ -27,6 +38,9 @@ function AuthenticatedApp({
   const [view, setView] = useState<View>('overview')
   const isAdmin = user.role === 'admin'
   const isOwner = Boolean(user.isOwner)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed)
+  // On phones the sidebar is a slide-in drawer instead of a collapsing rail.
+  const [drawerOpen, setDrawerOpen] = useState(false)
   const {
     students,
     loading,
@@ -64,43 +78,90 @@ function AuthenticatedApp({
     }
   }, [isAdmin, isOwner, view])
 
+  useEffect(() => {
+    if (!drawerOpen) return
+    const closeOnEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDrawerOpen(false)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [drawerOpen])
+
+  function toggleSidebar() {
+    if (window.matchMedia(DRAWER_QUERY).matches) {
+      setDrawerOpen((open) => !open)
+      return
+    }
+    const next = !sidebarCollapsed
+    setSidebarCollapsed(next)
+    try {
+      localStorage.setItem(SIDEBAR_KEY, next ? '1' : '0')
+    } catch {
+      // Remembering the choice is optional.
+    }
+  }
+
   const branding = whiteLabel.branding ?? user.branding
+  const sidebarIsOpen = window.matchMedia(DRAWER_QUERY).matches ? drawerOpen : !sidebarCollapsed
 
   return (
-    <div className="app-shell">
+    <div
+      className={`app-shell${sidebarCollapsed ? ' sidebar-collapsed' : ''}${drawerOpen ? ' drawer-open' : ''}`}
+    >
       <Sidebar
         current={view}
-        onChange={setView}
+        onChange={(next) => {
+          setView(next)
+          setDrawerOpen(false)
+        }}
         studentCount={students.length}
         user={user}
         branding={branding}
-        onLogout={onLogout}
+      />
+      <button
+        type="button"
+        className="drawer-backdrop"
+        aria-label="Close menu"
+        tabIndex={drawerOpen ? 0 : -1}
+        onClick={() => setDrawerOpen(false)}
       />
       <main className="main">
+        <div className="top-auth-bar">
+          <div className="top-bar-start">
+            <button
+              type="button"
+              className="sidebar-toggle"
+              onClick={toggleSidebar}
+              aria-label={sidebarIsOpen ? 'Close sidebar' : 'Open sidebar'}
+              aria-expanded={sidebarIsOpen}
+              title={sidebarIsOpen ? 'Close sidebar' : 'Open sidebar'}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                aria-hidden="true"
+              >
+                <path d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <p className="muted compact">
+              {user.username} · {user.role}
+              {branding?.displayName ? ` · ${branding.displayName}` : ''}
+            </p>
+          </div>
+          <button type="button" className="btn small ghost" onClick={onLogout}>
+            Logout
+          </button>
+        </div>
+
         {user.isDemo ? (
           <p className="demo-banner">
             <strong>Demo mode:</strong> you're viewing sample data. Changes are reset every few hours.
           </p>
         ) : null}
-        <div className="top-auth-bar">
-          <p className="muted compact">
-            {user.username} · {user.role}
-            {branding?.displayName ? ` · ${branding.displayName}` : ''}
-          </p>
-          <div className="auth-actions">
-            <button type="button" className="btn small ghost" onClick={onLogout}>
-              Logout
-            </button>
-            <button
-              type="button"
-              className="btn small primary"
-              onClick={onLogout}
-              title="Go to login screen"
-            >
-              Login
-            </button>
-          </div>
-        </div>
 
         {loading ? (
           <section className="panel">
