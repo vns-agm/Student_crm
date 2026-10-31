@@ -82,6 +82,7 @@ function studentStatements(student, index, now) {
     })
   })
 
+  // Recorded as a payment rather than amount_paid: the app adds the two together.
   const amountPaid = student.unpaid ? Math.round(packagePrice / 2) : packagePrice
   statements.unshift({
     sql: `INSERT INTO students (
@@ -90,7 +91,7 @@ function studentStatements(student, index, now) {
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id, student.name, student.age, firstDate, student.package, student.fee, student.batch,
-      packagePrice, amountPaid, student.category, DEMO_TENANT_ID, now, cycle, held - heldInCycle,
+      packagePrice, 0, student.category, DEMO_TENANT_ID, now, cycle, held - heldInCycle,
     ],
   })
   statements.splice(1, 0, {
