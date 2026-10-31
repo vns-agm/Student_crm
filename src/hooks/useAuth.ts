@@ -74,11 +74,11 @@ export function useAuth() {
     }
   }, [])
 
-  async function login(username: string, password: string) {
-    const res = await fetch('/api/login', {
+  async function authenticate(path: string, credentials?: object) {
+    const res = await fetch(path, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify(credentials ?? {}),
     })
 
     let message = 'Could not log in.'
@@ -105,6 +105,10 @@ export function useAuth() {
     }
   }
 
+  const login = (username: string, password: string) =>
+    authenticate('/api/login', { username, password })
+  const loginDemo = () => authenticate('/api/demo-login')
+
   return {
     user: auth?.user ?? null,
     token: auth?.token ?? '',
@@ -112,6 +116,7 @@ export function useAuth() {
     isAdmin: auth?.user?.role === 'admin',
     isParent: auth?.user?.role === 'parent',
     login,
+    loginDemo,
     logout,
   }
 }

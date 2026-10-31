@@ -1,4 +1,4 @@
-# Agm-Chess Classes — Student CRM
+# Agam Chess Classes — Student CRM
 
 React + Express API to manage student name, age, attendance, and fees.
 

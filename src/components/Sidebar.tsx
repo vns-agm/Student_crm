@@ -45,7 +45,7 @@ export function Sidebar({
     if (link.ownerOnly && !user.isOwner) return false
     return true
   })
-  const displayName = branding?.displayName || 'Agm-Chess Classes'
+  const displayName = branding?.displayName || 'Agam Chess Classes'
   const logoUrl = branding?.logoUrl || ''
 
   return (

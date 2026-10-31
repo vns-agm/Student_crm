@@ -7,7 +7,8 @@ import {
   requireAuth,
   requireOwner,
 } from './auth.js'
-import { db, ensureDb, getTenantById } from './db.js'
+import { db, ensureDb, ensureDemoDb, getTenantById, runWithDemoDb } from './db.js'
+import { refreshDemoData } from './demoData.js'
 import { computeStandings, makeSwissPairings } from './swiss.js'
 
 const app = express()
@@ -214,7 +215,7 @@ function isHexColor(value) {
   return /^#[0-9a-fA-F]{6}$/.test(value)
 }
 
-async function buildAuthUser(row) {
+async function buildAuthUser(row, isDemo = false) {
   const branding = await getTenantById(row.tenant_id)
   return {
     id: row.id,
@@ -222,6 +223,7 @@ async function buildAuthUser(row) {
     role: row.role,
     tenantId: row.tenant_id,
     isOwner: Boolean(row.is_owner),
+    isDemo,
     branding,
   }
 }
@@ -257,6 +259,19 @@ app.post('/api/login', async (req, res, next) => {
   }
 })
 
+app.post('/api/demo-login', async (_req, res, next) => {
+  try {
+    await ensureDemoDb()
+    const user = await refreshDemoData()
+    res.json({
+      token: createToken({ ...user, demo: true }),
+      user: await runWithDemoDb(() => buildAuthUser(user, true)),
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
 app.get('/api/me', requireAuth, async (req, res, next) => {
   try {
     const result = await db.execute({
@@ -267,7 +282,7 @@ app.get('/api/me', requireAuth, async (req, res, next) => {
     if (!row) {
       return res.status(401).json({ error: 'Please log in to continue.' })
     }
-    res.json({ user: await buildAuthUser(row) })
+    res.json({ user: await buildAuthUser(row, req.user.isDemo) })
   } catch (error) {
     next(error)
   }

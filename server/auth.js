@@ -1,13 +1,20 @@
 import crypto from 'node:crypto'
+import { ensureDemoDb, runWithDemoDb } from './db.js'
 
-const AUTH_SECRET =
-  process.env.AUTH_SECRET?.trim() || 'agm-chess-classes-dev-secret'
+// Signs login tokens. A public default would let anyone forge an admin token.
+const AUTH_SECRET = process.env.AUTH_SECRET?.trim() || 'local-development-only'
+if (process.env.VERCEL && !process.env.AUTH_SECRET?.trim()) {
+  throw new Error('AUTH_SECRET must be set in Vercel → Settings → Environment Variables.')
+}
+
+// Fixed so stored password hashes keep working; independent of AUTH_SECRET.
+const PASSWORD_SALT = 'agm-chess-classes-dev-secret'
 const TOKEN_TTL_MS = 1000 * 60 * 60 * 24 * 7 // 7 days
 
 export function hashPassword(password) {
   return crypto
     .createHash('sha256')
-    .update(`${password}:${AUTH_SECRET}`)
+    .update(`${password}:${PASSWORD_SALT}`)
     .digest('hex')
 }
 
@@ -18,6 +25,7 @@ export function createToken(user) {
     role: user.role,
     tenantId: user.tenant_id || user.tenantId,
     isOwner: Boolean(user.is_owner ?? user.isOwner),
+    demo: Boolean(user.demo),
     exp: Date.now() + TOKEN_TTL_MS,
   }
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url')
@@ -72,6 +80,14 @@ export function requireAuth(req, res, next) {
     role: payload.role,
     tenantId: payload.tenantId,
     isOwner: Boolean(payload.isOwner),
+    isDemo: Boolean(payload.demo),
+  }
+
+  if (req.user.isDemo) {
+    ensureDemoDb()
+      .then(() => runWithDemoDb(next))
+      .catch(next)
+    return
   }
   next()
 }

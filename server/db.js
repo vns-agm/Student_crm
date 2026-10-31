@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -7,9 +8,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export const DEFAULT_TENANT_ID = '00000000-0000-4000-8000-000000000001'
 
-function createDbClient() {
-  const url = process.env.TURSO_DATABASE_URL?.trim()
-  const authToken = process.env.TURSO_AUTH_TOKEN?.trim()
+function createDbClient(urlEnv, tokenEnv, localFile) {
+  const url = process.env[urlEnv]?.trim()
+  const authToken = process.env[tokenEnv]?.trim()
 
   if (url) {
     return createClient({ url, authToken })
@@ -25,11 +26,48 @@ function createDbClient() {
   }
 
   return createClient({
-    url: `file:${path.join(dataDir, 'student-crm.db')}`,
+    url: `file:${path.join(dataDir, localFile)}`,
   })
 }
 
-export const db = createDbClient()
+const primaryClient = createDbClient(
+  'TURSO_DATABASE_URL',
+  'TURSO_AUTH_TOKEN',
+  'student-crm.db',
+)
+
+// Demo logins run against their own database with the same tables, so demo
+// sessions can never read or change real student data.
+const demoUrl = process.env.DEMO_TURSO_DATABASE_URL?.trim()
+const demoClient =
+  demoUrl && demoUrl === process.env.TURSO_DATABASE_URL?.trim()
+    ? null
+    : createDbClient('DEMO_TURSO_DATABASE_URL', 'DEMO_TURSO_AUTH_TOKEN', 'student-crm-demo.db')
+
+const dbContext = new AsyncLocalStorage()
+
+function currentClient() {
+  return dbContext.getStore() ?? primaryClient
+}
+
+export const db = {
+  execute: (...args) => currentClient().execute(...args),
+  batch: (...args) => currentClient().batch(...args),
+  executeMultiple: (...args) => currentClient().executeMultiple(...args),
+}
+
+export function getDemoClient() {
+  if (!demoClient) {
+    throw new Error(
+      'Demo database not configured. Set DEMO_TURSO_DATABASE_URL and DEMO_TURSO_AUTH_TOKEN.',
+    )
+  }
+  return demoClient
+}
+
+export function runWithDemoDb(fn) {
+  return dbContext.run(getDemoClient(), fn)
+}
 
 async function hasColumn(table, column) {
   const result = await db.execute(`PRAGMA table_info(${table})`)
@@ -117,17 +155,7 @@ export async function getTenantById(id) {
   return mapTenantRow(result.rows[0])
 }
 
-let initPromise
-
-export function ensureDb() {
-  if (!initPromise) {
-    initPromise = (async () => {
-      if (!db) {
-        throw new Error(
-          'Database not configured for Vercel. Add TURSO_DATABASE_URL and TURSO_AUTH_TOKEN in Vercel → Settings → Environment Variables, then redeploy.',
-        )
-      }
-
+async function createSchema() {
       await db.executeMultiple(`
         CREATE TABLE IF NOT EXISTS tenants (
           id TEXT PRIMARY KEY,
@@ -250,6 +278,32 @@ export function ensureDb() {
       await ensureColumn('users', 'is_owner', 'INTEGER NOT NULL DEFAULT 0')
       await ensureColumn('tournaments', 'tenant_id', 'TEXT')
       await ensureColumn('tournament_players', 'category', "TEXT NOT NULL DEFAULT 'open'")
+}
+
+let initPromise
+let demoInitPromise
+
+// Same tables as the live database; demoData.js fills them with sample data.
+export function ensureDemoDb() {
+  if (!demoInitPromise) {
+    demoInitPromise = runWithDemoDb(createSchema).catch((error) => {
+      demoInitPromise = undefined
+      throw error
+    })
+  }
+  return demoInitPromise
+}
+
+export function ensureDb() {
+  if (!initPromise) {
+    initPromise = (async () => {
+      if (!primaryClient) {
+        throw new Error(
+          'Database not configured for Vercel. Add TURSO_DATABASE_URL and TURSO_AUTH_TOKEN in Vercel → Settings → Environment Variables, then redeploy.',
+        )
+      }
+
+      await createSchema()
 
       const existingTenant = await db.execute({
         sql: 'SELECT id FROM tenants WHERE id = ?',
@@ -263,9 +317,9 @@ export function ensureDb() {
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           args: [
             DEFAULT_TENANT_ID,
-            'Agm-Chess Classes',
+            'Agam Chess Classes',
             'agm-chess',
-            'Agm-Chess Classes',
+            'Agam Chess Classes',
             '',
             '#1a4d3e',
             '#b8892c',
@@ -273,6 +327,13 @@ export function ensureDb() {
           ],
         })
       }
+
+      // Rename the academy, leaving any name set in white-label settings alone.
+      await db.execute({
+        sql: `UPDATE tenants SET name = 'Agam Chess Classes', display_name = 'Agam Chess Classes'
+              WHERE id = ? AND display_name = 'Agm-Chess Classes'`,
+        args: [DEFAULT_TENANT_ID],
+      })
 
       await db.execute({
         sql: 'UPDATE users SET tenant_id = ? WHERE tenant_id IS NULL OR tenant_id = \'\'',
@@ -296,37 +357,38 @@ export function ensureDb() {
       })
 
       const { hashPassword } = await import('./auth.js')
-      const defaults = [
-        { username: 'admin', password: 'masteradmin123', role: 'admin', isOwner: 1 },
-        { username: 'parent', password: 'parent123', role: 'parent', isOwner: 0 },
-      ]
 
-      for (const account of defaults) {
-        const existing = await db.execute({
-          sql: 'SELECT id FROM users WHERE username = ?',
-          args: [account.username],
+      // The admin password comes only from ADMIN_PASSWORD, never from source code.
+      const adminPassword = process.env.ADMIN_PASSWORD?.trim()
+      const admin = await db.execute({
+        sql: 'SELECT id FROM users WHERE username = ?',
+        args: ['admin'],
+      })
+      if (adminPassword && admin.rows[0]) {
+        await db.execute({
+          sql: `UPDATE users SET password_hash = ?, is_owner = 1 WHERE username = 'admin' AND tenant_id = ?`,
+          args: [hashPassword(adminPassword), DEFAULT_TENANT_ID],
         })
-        if (!existing.rows[0]) {
-          await db.execute({
-            sql: `INSERT INTO users (id, username, password_hash, role, tenant_id, is_owner, created_at)
-                  VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            args: [
-              crypto.randomUUID(),
-              account.username,
-              hashPassword(account.password),
-              account.role,
-              DEFAULT_TENANT_ID,
-              account.isOwner,
-              new Date().toISOString(),
-            ],
-          })
-        } else if (account.username === 'admin') {
-          await db.execute({
-            sql: `UPDATE users SET password_hash = ?, is_owner = 1 WHERE username = 'admin' AND tenant_id = ?`,
-            args: [hashPassword(account.password), DEFAULT_TENANT_ID],
-          })
-        }
+      } else if (adminPassword) {
+        await db.execute({
+          sql: `INSERT INTO users (id, username, password_hash, role, tenant_id, is_owner, created_at)
+                VALUES (?, 'admin', ?, 'admin', ?, 1, ?)`,
+          args: [
+            crypto.randomUUID(),
+            hashPassword(adminPassword),
+            DEFAULT_TENANT_ID,
+            new Date().toISOString(),
+          ],
+        })
+      } else if (!admin.rows[0]) {
+        console.warn('No admin account: set ADMIN_PASSWORD to create one.')
       }
+
+      // Lock the old sample parent login, whose password was public in source code.
+      await db.execute({
+        sql: `UPDATE users SET password_hash = '!' WHERE username = 'parent' AND password_hash = ?`,
+        args: ['1e6ae67b070d416bc3872fed81f88734287c0f855c5b0adce89eb5f1c8510dc1'],
+      })
     })()
   }
 

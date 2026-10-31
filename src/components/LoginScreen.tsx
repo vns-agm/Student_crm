@@ -5,9 +5,10 @@ import { ChessLoginScene } from './ChessLoginScene'
 
 interface LoginScreenProps {
   onLogin: (username: string, password: string) => Promise<AuthUser>
+  onDemoLogin: () => Promise<AuthUser>
 }
 
-export function LoginScreen({ onLogin }: LoginScreenProps) {
+export function LoginScreen({ onLogin, onDemoLogin }: LoginScreenProps) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -26,6 +27,18 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
       await onLogin(username.trim(), password)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not log in.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDemoLogin() {
+    setError('')
+    try {
+      setSaving(true)
+      await onDemoLogin()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not open the demo.')
     } finally {
       setSaving(false)
     }
@@ -50,8 +63,8 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
       <div className="login-hero">
         {useVideo ? null : <ChessLoginScene />}
         <div className="login-hero-copy">
-          <p className="login-kicker">Chess academy management</p>
-          <h1 className="login-hero-title">Student CRM</h1>
+          <p className="login-kicker">Student CRM</p>
+          <h1 className="login-hero-title">Agam Chess Classes</h1>
           <p className="login-hero-sub">
             Attendance, fees, renewals and tournaments for every young player, all in one place.
           </p>
@@ -104,6 +117,19 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
         <button type="submit" className="btn primary login-submit" disabled={saving}>
           {saving ? 'Logging in…' : 'Login'}
         </button>
+
+        <div className="login-divider">
+          <span>or</span>
+        </div>
+        <button
+          type="button"
+          className="btn ghost login-submit"
+          onClick={handleDemoLogin}
+          disabled={saving}
+        >
+          Try the demo
+        </button>
+        <p className="muted login-demo-note">Explore with sample students. No password needed.</p>
       </form>
     </div>
   )

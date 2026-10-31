@@ -77,6 +77,11 @@ function AuthenticatedApp({
         onLogout={onLogout}
       />
       <main className="main">
+        {user.isDemo ? (
+          <p className="demo-banner">
+            <strong>Demo mode:</strong> you're viewing sample data. Changes are reset every few hours.
+          </p>
+        ) : null}
         <div className="top-auth-bar">
           <p className="muted compact">
             {user.username} · {user.role}
@@ -222,7 +227,7 @@ function AuthenticatedApp({
 }
 
 function App() {
-  const { user, checking, login, logout } = useAuth()
+  const { user, checking, login, loginDemo, logout } = useAuth()
 
   if (checking) {
     return (
@@ -233,7 +238,7 @@ function App() {
   }
 
   if (!user) {
-    return <LoginScreen onLogin={login} />
+    return <LoginScreen onLogin={login} onDemoLogin={loginDemo} />
   }
 
   return (
