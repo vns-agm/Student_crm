@@ -1,5 +1,5 @@
 import crypto from 'node:crypto'
-import { getDemoClient } from './db.js'
+import { createDemoSchema, getDemoClient } from './db.js'
 
 export const DEMO_TENANT_ID = '00000000-0000-4000-8000-00000000de30'
 const DEMO_USER_ID = 'demo-user'
@@ -187,6 +187,8 @@ export async function refreshDemoData() {
   const seeded = await client.execute(`SELECT value FROM demo_meta WHERE key = 'seeded_at'`)
   const seededAt = Date.parse(seeded.rows[0]?.value ?? '')
   if (!(Date.now() - seededAt < RESEED_AFTER_MS)) {
+    // Schema setup is slow over the network, so it only runs with a reset.
+    await createDemoSchema()
     await reseed(client)
   }
   const user = await client.execute({

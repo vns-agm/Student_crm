@@ -1,5 +1,5 @@
 import crypto from 'node:crypto'
-import { ensureDemoDb, runWithDemoDb } from './db.js'
+import { runWithDemoDb } from './db.js'
 
 // Signs login tokens. A public default would let anyone forge an admin token.
 const AUTH_SECRET = process.env.AUTH_SECRET?.trim() || 'local-development-only'
@@ -84,9 +84,11 @@ export function requireAuth(req, res, next) {
   }
 
   if (req.user.isDemo) {
-    ensureDemoDb()
-      .then(() => runWithDemoDb(next))
-      .catch(next)
+    try {
+      runWithDemoDb(next)
+    } catch (error) {
+      next(error)
+    }
     return
   }
   next()

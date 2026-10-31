@@ -7,7 +7,7 @@ import {
   requireAuth,
   requireOwner,
 } from './auth.js'
-import { db, ensureDb, ensureDemoDb, getTenantById, runWithDemoDb } from './db.js'
+import { db, ensureDb, getTenantById, runWithDemoDb } from './db.js'
 import { refreshDemoData } from './demoData.js'
 import { computeStandings, makeSwissPairings } from './swiss.js'
 
@@ -37,7 +37,8 @@ app.get('/api/health', (_req, res) => {
 })
 
 app.use(async (req, res, next) => {
-  if (req.path === '/api/health') return next()
+  // The demo uses its own database, so it doesn't wait on the live one.
+  if (req.path === '/api/health' || req.path === '/api/demo-login') return next()
   try {
     await ensureDb()
     next()
@@ -261,7 +262,6 @@ app.post('/api/login', async (req, res, next) => {
 
 app.post('/api/demo-login', async (_req, res, next) => {
   try {
-    await ensureDemoDb()
     const user = await refreshDemoData()
     res.json({
       token: createToken({ ...user, demo: true }),

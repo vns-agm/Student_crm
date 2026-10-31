@@ -281,17 +281,10 @@ async function createSchema() {
 }
 
 let initPromise
-let demoInitPromise
 
 // Same tables as the live database; demoData.js fills them with sample data.
-export function ensureDemoDb() {
-  if (!demoInitPromise) {
-    demoInitPromise = runWithDemoDb(createSchema).catch((error) => {
-      demoInitPromise = undefined
-      throw error
-    })
-  }
-  return demoInitPromise
+export function createDemoSchema() {
+  return runWithDemoDb(createSchema)
 }
 
 export function ensureDb() {
